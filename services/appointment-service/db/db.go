@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 	"os"
+
+	_ "github.com/lib/pq"
 )
 
 func Connect() *sql.DB {
