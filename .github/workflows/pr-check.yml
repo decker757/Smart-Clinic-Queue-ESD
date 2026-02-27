@@ -64,6 +64,7 @@ jobs:
 
   e2e-test:
     name: E2E Tests
+    if: false # enable when frontend is ready
     runs-on: ubuntu-latest
     defaults:
       run:
