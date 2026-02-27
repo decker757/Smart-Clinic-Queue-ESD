@@ -2,11 +2,11 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY services/auth-service/package*.json ./
 RUN npm ci
 
-COPY tsconfig.json ./
-COPY src ./src
+COPY services/auth-service/tsconfig.json ./
+COPY services/auth-service/src ./src
 
 RUN npm run build
 
