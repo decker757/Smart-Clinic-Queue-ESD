@@ -1,13 +1,15 @@
 #!/bin/sh
-set -e
 
 KONG_ADMIN="http://kong:8001"
 
 echo "Waiting for Kong to be ready..."
-until curl -sf "$KONG_ADMIN/status" > /dev/null; do
-  sleep 2
+until curl -sf "$KONG_ADMIN/status" > /dev/null 2>&1; do
+  echo "Kong not ready yet, retrying in 5s..."
+  sleep 5
 done
 echo "Kong is ready."
+
+set -e
 
 # ─── Auth Service ────────────────────────────────────────────
 echo "Configuring auth-service..."
