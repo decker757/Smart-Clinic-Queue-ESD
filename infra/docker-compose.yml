@@ -1,0 +1,192 @@
+services:
+
+  # ─── API Gateway ────────────────────────────────────────────
+  kong:
+    image: kong:3.9
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+    ports:
+      - "8000:8000"   # proxy
+      - "8001:8001"   # admin API
+    depends_on:
+      kong-migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  kong-migrations:
+    image: kong:3.9
+    command: kong migrations bootstrap
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+    depends_on:
+      kong-db:
+        condition: service_healthy
+    restart: on-failure
+
+  kong-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+      POSTGRES_DB: kong
+    volumes:
+      - kong-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  kong-setup:
+    image: curlimages/curl:latest
+    volumes:
+      - ./kong/setup.sh:/setup.sh
+    command: sh /setup.sh
+    depends_on:
+      kong:
+        condition: service_healthy
+    restart: on-failure
+
+  # ─── Message Broker ─────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Application Database ───────────────────────────────────
+  app-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: clinic
+    volumes:
+      - app-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "app", "-d", "clinic"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── Services ───────────────────────────────────────────────
+  auth-service:
+    build:
+      context: ../services/auth-service
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./env/auth.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  appointment-service:
+    build:
+      context: ../services/appointment-service
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./env/appointment.env
+    depends_on:
+      app-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  queue-coordinator-service:
+    build:
+      context: ../services/queue-coordinator-service
+    ports:
+      - "3002:3002"
+    env_file:
+      - ./env/queue-coordinator.env
+    depends_on:
+      app-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  eta-service:
+    build:
+      context: ../services/eta-service
+    ports:
+      - "3003:3003"
+    env_file:
+      - ./env/eta.env
+    depends_on:
+      app-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ../services/notification-service
+    ports:
+      - "3004:3004"
+    env_file:
+      - ./env/notification.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  activity-log-service:
+    build:
+      context: ../services/activity-log-service
+    ports:
+      - "3005:3005"
+    env_file:
+      - ./env/activity-log.env
+    depends_on:
+      app-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Frontend ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend/vue-app
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+
+volumes:
+  kong-db-data:
+  app-db-data:
+  rabbitmq-data:
