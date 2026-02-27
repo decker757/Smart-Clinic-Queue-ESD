@@ -1,14 +1,15 @@
-name: Deploy to Railway
+name: Deploy Appointment Service
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'services/appointment-service/**'
 
 jobs:
   deploy:
-    name: Deploy
+    name: Deploy to Railway
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -16,6 +17,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy to Railway
-        run: railway up --detach
+        run: railway up --service appointment-service --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
