@@ -60,6 +60,8 @@ services:
     volumes:
       - ./kong/setup.sh:/setup.sh
     command: sh /setup.sh
+    env_file:
+      - ./env/auth.env
     depends_on:
       kong:
         condition: service_healthy
@@ -112,16 +114,12 @@ services:
 
   appointment-service:
     build:
-      context: ../services/appointment-service
+      context: ..
+      dockerfile: services/appointment-service/Dockerfile
     ports:
       - "3001:3001"
     env_file:
       - ./env/appointment.env
-    depends_on:
-      app-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     restart: unless-stopped
 
   queue-coordinator-service:
