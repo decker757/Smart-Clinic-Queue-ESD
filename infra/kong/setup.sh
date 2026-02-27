@@ -69,4 +69,22 @@ curl -sf -o /dev/null -X PUT "$KONG_ADMIN/routes/auth-route" \
 #   --data "paths[]=/api/activity" \
 #   --data "strip_path=false"
 
+# ─── JWT Plugin ─────────────────────────────────────────────
+echo "Configuring JWT plugin..."
+
+# Create a Kong consumer representing BetterAuth
+curl -sf -o /dev/null -X PUT "$KONG_ADMIN/consumers/better-auth"
+
+# Add JWT credential matching BetterAuth's issuer and secret
+curl -sf -o /dev/null -X POST "$KONG_ADMIN/consumers/better-auth/jwt" \
+  --data "algorithm=HS256" \
+  --data "key=smart-clinic" \
+  --data "secret=${BETTER_AUTH_SECRET}"
+
+# Enable JWT plugin on all protected routes (not auth)
+for ROUTE in appointment-route queue-route eta-route notification-route activity-log-route; do
+  curl -sf -o /dev/null -X POST "$KONG_ADMIN/routes/$ROUTE/plugins" \
+    --data "name=jwt" 2>/dev/null || true
+done
+
 echo "Kong configuration complete."

@@ -60,6 +60,8 @@ services:
     volumes:
       - ./kong/setup.sh:/setup.sh
     command: sh /setup.sh
+    env_file:
+      - ./env/auth.env
     depends_on:
       kong:
         condition: service_healthy
