@@ -110,6 +110,60 @@ http://localhost:8000/api/activity/*     → activity-log-service
 
 Sensitive credentials are gitignored. Use `.env.example` files to document required variables without values.
 
+## Adding a New Service
+
+### Dockerfile requirements for Railway
+
+Railway builds from the **repo root** as the build context. Your Dockerfile must use paths relative to the repo root, not the service directory.
+
+**Node.js service (use this as a template):**
+
+```dockerfile
+FROM node:22-alpine
+
+WORKDIR /app
+
+COPY services/your-service-name/package*.json ./
+RUN npm ci
+
+COPY services/your-service-name/tsconfig.json ./
+COPY services/your-service-name/src ./src
+
+RUN npm run build
+
+EXPOSE 3001
+
+CMD ["npm", "run", "start"]
+```
+
+**Python service:**
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY services/your-service-name/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY services/your-service-name/src ./src
+
+EXPOSE 3001
+
+CMD ["python", "src/main.py"]
+```
+
+> ⚠️ The key difference from a standard Dockerfile is that `COPY` paths must include the full path from the repo root (e.g. `services/your-service-name/src`) instead of just `src`.
+
+### Railway setup for a new service
+
+1. In Railway dashboard → **New Service** → **GitHub Repo**
+2. **Settings → Source**:
+   - Dockerfile Path: `/services/your-service-name/Dockerfile`
+   - Watch Paths: `/services/your-service-name/src`
+3. **Variables** → add all required env vars
+4. The deploy workflow in `.github/workflows/deploy-your-service.yml` will auto-deploy on merge to `main`
+
 ## Infrastructure
 
 - **Kong Admin UI**: `http://localhost:8001`
