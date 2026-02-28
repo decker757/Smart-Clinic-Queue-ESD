@@ -176,6 +176,20 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ─── Composite Services ─────────────────────────────────────
+  composite-appointment:
+    build:
+      context: ..
+      dockerfile: composite/appointment/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./env/composite-appointment.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
   # ─── Frontend ───────────────────────────────────────────────
   frontend:
     build:
