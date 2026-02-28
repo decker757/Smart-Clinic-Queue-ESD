@@ -182,7 +182,7 @@ services:
       context: ..
       dockerfile: composite/appointment/Dockerfile
     ports:
-      - "8000:8000"
+      - "8080:8000"
     env_file:
       - ./env/composite-appointment.env
     depends_on:
