@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'services/eta-service/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/eta-service/**'
 
 jobs:
   deploy:

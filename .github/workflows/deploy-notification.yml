@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'services/notification-service/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/notification-service/**'
 
 jobs:
   deploy:

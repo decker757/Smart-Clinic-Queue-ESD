@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'services/activity-log-service/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/activity-log-service/**'
 
 jobs:
   deploy:

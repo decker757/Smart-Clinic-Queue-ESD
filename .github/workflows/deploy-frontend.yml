@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'frontend/vue-app/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/vue-app/**'
 
 jobs:
   deploy:

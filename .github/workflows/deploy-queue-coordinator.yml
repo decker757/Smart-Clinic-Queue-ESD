@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'services/queue-coordinator-service/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/queue-coordinator-service/**'
 
 jobs:
   deploy:

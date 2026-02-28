@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'services/appointment-service/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/appointment-service/**'
 
 jobs:
   deploy:
