@@ -102,7 +102,8 @@ services:
   # ─── Services ───────────────────────────────────────────────
   auth-service:
     build:
-      context: ../services/auth-service
+      context: ..
+      dockerfile: services/auth-service/Dockerfile
     ports:
       - "3000:3000"
     env_file:
@@ -122,59 +123,59 @@ services:
       - ./env/appointment.env
     restart: unless-stopped
 
-  queue-coordinator-service:
-    build:
-      context: ../services/queue-coordinator-service
-    ports:
-      - "3002:3002"
-    env_file:
-      - ./env/queue-coordinator.env
-    depends_on:
-      app-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
+  # queue-coordinator-service:
+  #   build:
+  #     context: ../services/queue-coordinator-service
+  #   ports:
+  #     - "3002:3002"
+  #   env_file:
+  #     - ./env/queue-coordinator.env
+  #   depends_on:
+  #     app-db:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
-  eta-service:
-    build:
-      context: ../services/eta-service
-    ports:
-      - "3003:3003"
-    env_file:
-      - ./env/eta.env
-    depends_on:
-      app-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
+  # eta-service:
+  #   build:
+  #     context: ../services/eta-service
+  #   ports:
+  #     - "3003:3003"
+  #   env_file:
+  #     - ./env/eta.env
+  #   depends_on:
+  #     app-db:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
-  notification-service:
-    build:
-      context: ../services/notification-service
-    ports:
-      - "3004:3004"
-    env_file:
-      - ./env/notification.env
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
+  # notification-service:
+  #   build:
+  #     context: ../services/notification-service
+  #   ports:
+  #     - "3004:3004"
+  #   env_file:
+  #     - ./env/notification.env
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
-  activity-log-service:
-    build:
-      context: ../services/activity-log-service
-    ports:
-      - "3005:3005"
-    env_file:
-      - ./env/activity-log.env
-    depends_on:
-      app-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
+  # activity-log-service:
+  #   build:
+  #     context: ../services/activity-log-service
+  #   ports:
+  #     - "3005:3005"
+  #   env_file:
+  #     - ./env/activity-log.env
+  #   depends_on:
+  #     app-db:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
   # ─── Composite Services ─────────────────────────────────────
   composite-appointment:
@@ -191,12 +192,12 @@ services:
     restart: unless-stopped
 
   # ─── Frontend ───────────────────────────────────────────────
-  frontend:
-    build:
-      context: ../frontend/vue-app
-    ports:
-      - "5173:5173"
-    restart: unless-stopped
+  # frontend:
+  #   build:
+  #     context: ../frontend/vue-app
+  #   ports:
+  #     - "5173:5173"
+  #   restart: unless-stopped
 
 volumes:
   kong-db-data:
