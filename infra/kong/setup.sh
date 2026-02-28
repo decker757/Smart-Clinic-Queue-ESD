@@ -33,6 +33,17 @@ curl -sf -o /dev/null -X PUT "$KONG_ADMIN/routes/auth-route" \
 #   --data "paths[]=/api/appointments" \
 #   --data "strip_path=false"
 
+# ─── Composite Appointment Service ───────────────────────────
+echo "Configuring composite-appointment..."
+
+curl -sf -o /dev/null -X PUT "$KONG_ADMIN/services/composite-appointment" \
+  --data "url=http://composite-appointment:8000"
+
+curl -sf -o /dev/null -X PUT "$KONG_ADMIN/routes/composite-appointment-route" \
+  --data "service.name=composite-appointment" \
+  --data "paths[]=/api/composite/appointments" \
+  --data "strip_path=false"
+
 # ─── Queue Coordinator Service ───────────────────────────────
 # echo "Configuring queue-coordinator-service..."
 # curl -sf -o /dev/null -X PUT "$KONG_ADMIN/services/queue-coordinator-service" \
@@ -82,7 +93,7 @@ curl -sf -o /dev/null -X POST "$KONG_ADMIN/consumers/better-auth/jwt" \
   --data "secret=${BETTER_AUTH_SECRET}"
 
 # Enable JWT plugin on all protected routes (not auth)
-for ROUTE in appointment-route queue-route eta-route notification-route activity-log-route; do
+for ROUTE in composite-appointment-route appointment-route queue-route eta-route notification-route activity-log-route; do
   curl -sf -o /dev/null -X POST "$KONG_ADMIN/routes/$ROUTE/plugins" \
     --data "name=jwt" 2>/dev/null || true
 done
