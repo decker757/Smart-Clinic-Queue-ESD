@@ -33,7 +33,7 @@ func GetAppointments(db *sql.DB) gin.HandlerFunc {
 				start_time, estimated_time, queue_position, notes,
 				status, created_at, updated_at
 			FROM appointments
-			WHERE ($1::uuid IS NULL OR patient_id = $1::uuid)
+			WHERE ($1 IS NULL OR patient_id = $1)
 			  AND ($2::uuid IS NULL OR doctor_id  = $2::uuid)
 			  AND ($3::date IS NULL OR start_time::date = $3::date)
 			ORDER BY start_time ASC
@@ -133,7 +133,7 @@ func CreateAppointment(db *sql.DB) gin.HandlerFunc {
 		var a models.Appointment
 		err := db.QueryRowContext(c.Request.Context(), `
 			INSERT INTO appointments (patient_id, doctor_id, start_time, notes, status)
-			VALUES ($1::uuid, $2::uuid, $3, $4, $5)
+			VALUES ($1, $2::uuid, $3, $4, $5)
 			RETURNING id::text, patient_id::text, doctor_id::text,
 					  start_time, estimated_time, queue_position, notes,
 					  status, created_at, updated_at

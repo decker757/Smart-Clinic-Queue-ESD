@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS doctors (
 
 CREATE TABLE IF NOT EXISTS appointments (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id      UUID NOT NULL,
+    patient_id      TEXT NOT NULL,
     doctor_id       UUID REFERENCES doctors(id),
     start_time      TIMESTAMPTZ NOT NULL,
     estimated_time  TIMESTAMPTZ,

@@ -1,6 +1,16 @@
 import httpx
+from fastapi import HTTPException
 from src.config import settings
 from src.models.appointment import AppointmentServiceRequest, AppointmentResponse
+
+
+def _forward_error(e: httpx.HTTPStatusError) -> None:
+    """Re-raise an atomic service error as a FastAPI HTTPException."""
+    try:
+        detail = e.response.json().get("error", e.response.text)
+    except Exception:
+        detail = e.response.text
+    raise HTTPException(status_code=e.response.status_code, detail=detail)
 
 
 async def create_appointment(data: AppointmentServiceRequest, token: str) -> AppointmentResponse:
@@ -12,7 +22,10 @@ async def create_appointment(data: AppointmentServiceRequest, token: str) -> App
             headers={"Authorization": f"Bearer {token}"},
             timeout=10.0,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            _forward_error(e)
         return AppointmentResponse(**response.json())
 
 
@@ -24,7 +37,10 @@ async def get_appointment(appointment_id: str, token: str) -> AppointmentRespons
             headers={"Authorization": f"Bearer {token}"},
             timeout=10.0,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            _forward_error(e)
         return AppointmentResponse(**response.json())
 
 
@@ -36,5 +52,8 @@ async def cancel_appointment(appointment_id: str, token: str) -> AppointmentResp
             headers={"Authorization": f"Bearer {token}"},
             timeout=10.0,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            _forward_error(e)
         return AppointmentResponse(**response.json())

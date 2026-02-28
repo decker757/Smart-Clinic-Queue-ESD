@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
-import { jwt } from "better-auth/plugins";
+import { jwt, bearer } from "better-auth/plugins";
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -16,6 +16,7 @@ export const auth = betterAuth({
         enabled: true,
     },
     plugins: [
+        bearer(),
         jwt({
             jwt: {
                 issuer: "smart-clinic",
