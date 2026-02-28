@@ -6,6 +6,7 @@ import (
 
 	"appointment-service/models"
 	"github.com/gin-gonic/gin"
+	"github.com/lib/pq"
 )
 
 func GetAppointments(db *sql.DB) gin.HandlerFunc {
@@ -101,9 +102,13 @@ func CreateAppointment(db *sql.DB) gin.HandlerFunc {
 			Scan(&a.ID, &a.PatientID, &a.DoctorID,
 				&a.StartTime, &a.Status, &a.CreatedAt, &a.UpdatedAt)
 		if err != nil {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+				c.JSON(http.StatusConflict, gin.H{"error": "this time slot is already booked for the doctor"})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
-		} 
+		}
 		c.JSON(http.StatusCreated, a)
 	}
 }
