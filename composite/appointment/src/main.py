@@ -13,23 +13,32 @@ from src.services import auth, appointment as appointment_service
 app = FastAPI(title="Appointment Composite Service", version="1.0.0")
 
 
-async def publish_event(event_name: str, payload: dict):
-    """Publish an event to RabbitMQ."""
+async def publish_event(routing_key: str, payload: dict):
+    """Publish an event to the clinic topic exchange.
+
+    routing_key examples: "appointment.booked", "appointment.cancelled"
+    Each downstream service binds its own queue to this exchange,
+    so all subscribers receive every matching event independently.
+    """
     try:
         connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
         async with connection:
             channel = await connection.channel()
-            await channel.declare_queue(event_name, durable=True)
-            await channel.default_exchange.publish(
+            exchange = await channel.declare_exchange(
+                "clinic.events",
+                aio_pika.ExchangeType.TOPIC,
+                durable=True,
+            )
+            await exchange.publish(
                 aio_pika.Message(
                     body=json.dumps(payload).encode(),
                     content_type="application/json",
                 ),
-                routing_key=event_name,
+                routing_key=routing_key,
             )
     except Exception as e:
         # log but don't fail the request if RabbitMQ is unavailable
-        print(f"[RabbitMQ] Failed to publish {event_name}: {e}")
+        print(f"[RabbitMQ] Failed to publish {routing_key}: {e}")
 
 
 @app.post("/composite/appointments", response_model=AppointmentResponse, status_code=201)
