@@ -6,6 +6,7 @@ import (
 
 	"appointment-service/models"
 	"github.com/gin-gonic/gin"
+	_"github.com/lib/pq"
 )
 
 func GetAppointments(db *sql.DB) gin.HandlerFunc {
