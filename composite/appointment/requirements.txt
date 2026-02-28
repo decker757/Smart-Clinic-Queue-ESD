@@ -1,0 +1,6 @@
+fastapi==0.134.0
+pydantic
+uvicorn
+httpx
+aio-pika
+python-dotenv
