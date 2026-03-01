@@ -15,6 +15,10 @@ BTL:
 
 import { AppointmentInfo, QueueEntry } from "../model/Queue";
 import pool from "../db/db";
+import redis from "../db/redis";
+
+const CACHE_TTL = 10; // seconds
+const cacheKey = (appointment_id: string) => `queue:position:${appointment_id}`;
 
 export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEntry> {
     try {
@@ -46,6 +50,7 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
             queue_number,
         ]);
 
+        await redis.del(cacheKey(appointment.appointment_id));
         return rows[0] as QueueEntry;
     } catch (e) {
         console.error("Error adding to queue:", e);
@@ -55,6 +60,9 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
 
 export async function getQueuePosition(appointment_id: string){
     try{
+        const cached = await redis.get(cacheKey(appointment_id));
+        if (cached) return JSON.parse(cached);
+
         const response = await pool.query(`
             SELECT queue_number, estimated_time FROM queue.queue_entries WHERE
             appointment_id = $1;
@@ -64,6 +72,8 @@ export async function getQueuePosition(appointment_id: string){
         if (!response.rows[0]){
             throw new Error("Appointment not in queue");
         }
+
+        await redis.setex(cacheKey(appointment_id), CACHE_TTL, JSON.stringify(response.rows[0]));
         return response.rows[0];
 
     } catch (e){
@@ -85,6 +95,7 @@ export async function removeFromQueue(appointment_id: string){
         );
 
         if (!response.rows[0]) throw new Error("Appointment not in queue");
+        await redis.del(cacheKey(appointment_id));
         return response.rows[0];
 
     }catch (e){
@@ -108,6 +119,7 @@ export async function checkIn(appointment_id: string): Promise<QueueEntry> {
                 UPDATE queue.queue_entries SET status = 'checked_in', updated_at = NOW()
                 WHERE appointment_id = $1 RETURNING *
             `, [appointment_id]);
+            await redis.del(cacheKey(appointment_id));
             return updated[0] as QueueEntry;
         }
 
@@ -125,6 +137,7 @@ export async function checkIn(appointment_id: string): Promise<QueueEntry> {
                 SET status = 'waiting', queue_number = $2, updated_at = NOW()
                 WHERE appointment_id = $1 RETURNING *
             `, [appointment_id, newQueueNumber]);
+            await redis.del(cacheKey(appointment_id));
             return updated[0] as QueueEntry;
         }
 
@@ -143,6 +156,7 @@ export async function markNoShow(appointment_id: string): Promise<QueueEntry> {
             RETURNING *
         `, [appointment_id]);
         if (!rows[0]) throw new Error("Appointment not found or already resolved");
+        await redis.del(cacheKey(appointment_id));
         return rows[0] as QueueEntry;
     } catch (e) {
         console.error("Error marking no-show:", e);
@@ -171,6 +185,7 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
 
         if (!rows[0]) throw new Error("No waiting patients in queue");
 
+        await redis.del(cacheKey(rows[0].appointment_id));
         return rows[0] as QueueEntry;
     } catch (e) {
         console.error("Error calling next patient:", e);
@@ -183,7 +198,11 @@ export async function resetDailyQueue(){
         await pool.query(`DELETE FROM queue.queue_entries`);
         await pool.query(`ALTER SEQUENCE queue.queue_number_morning_seq RESTART WITH 1`);
         await pool.query(`ALTER SEQUENCE queue.queue_number_afternoon_seq RESTART WITH 1`);
-        
+
+        // Flush all cached queue positions
+        const keys = await redis.keys("queue:position:*");
+        if (keys.length > 0) await redis.del(...keys);
+
     }catch (e){
         console.error("Failed to reset queue:", e);
         throw e;
