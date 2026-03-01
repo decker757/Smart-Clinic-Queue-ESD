@@ -59,6 +59,7 @@ async def create_appointment(
             patient_id=body.patient_id,
             doctor_id=body.doctor_id,
             start_time=body.start_time,
+            session=body.session,
             notes=body.notes,
         ),
         token,
@@ -70,6 +71,7 @@ async def create_appointment(
         patient_id=appt.patient_id,
         doctor_id=appt.doctor_id,
         start_time=appt.start_time,
+        session=appt.session,
     ).model_dump(mode="json"))
 
     return appt
