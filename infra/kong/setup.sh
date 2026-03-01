@@ -45,13 +45,15 @@ curl -sf -o /dev/null -X PUT "$KONG_ADMIN/routes/composite-appointment-route" \
   --data "strip_path=false"
 
 # ─── Queue Coordinator Service ───────────────────────────────
-# echo "Configuring queue-coordinator-service..."
-# curl -sf -o /dev/null -X PUT "$KONG_ADMIN/services/queue-coordinator-service" \
-#   --data "url=http://queue-coordinator-service:3002"
-# curl -sf -o /dev/null -X PUT "$KONG_ADMIN/routes/queue-route" \
-#   --data "service.name=queue-coordinator-service" \
-#   --data "paths[]=/api/queue" \
-#   --data "strip_path=false"
+echo "Configuring queue-coordinator-service..."
+
+curl -sf -o /dev/null -X PUT "$KONG_ADMIN/services/queue-coordinator-service" \
+  --data "url=http://queue-coordinator-service:3002"
+
+curl -sf -o /dev/null -X PUT "$KONG_ADMIN/routes/queue-route" \
+  --data "service.name=queue-coordinator-service" \
+  --data "paths[]=/api/queue" \
+  --data "strip_path=false"
 
 # ─── ETA Service ─────────────────────────────────────────────
 # echo "Configuring eta-service..."

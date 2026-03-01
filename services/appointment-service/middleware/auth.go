@@ -1,11 +1,12 @@
 package middleware
 
 import (
-	"crypto/ed25519"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -16,19 +17,19 @@ import (
 
 type jwkKey struct {
 	Kty string `json:"kty"`
-	Crv string `json:"crv"`
-	X   string `json:"x"` // base64url-encoded public key bytes
-	Kid string `json:"kid"`
 	Alg string `json:"alg"`
+	Kid string `json:"kid"`
+	N   string `json:"n"` // RSA modulus (base64url)
+	E   string `json:"e"` // RSA exponent (base64url)
 }
 
 type jwksResponse struct {
 	Keys []jwkKey `json:"keys"`
 }
 
-// FetchPublicKey retrieves the EdDSA public key from the auth-service JWKS endpoint.
+// FetchPublicKey retrieves the RS256 public key from the auth-service JWKS endpoint.
 // Called once at startup — the service cannot run without it.
-func FetchPublicKey() (ed25519.PublicKey, error) {
+func FetchPublicKey() (*rsa.PublicKey, error) {
 	url := os.Getenv("AUTH_SERVICE_URL") + "/api/auth/jwks"
 	resp, err := http.Get(url)
 	if err != nil {
@@ -42,21 +43,27 @@ func FetchPublicKey() (ed25519.PublicKey, error) {
 	}
 
 	for _, k := range body.Keys {
-		if k.Alg == "EdDSA" || k.Crv == "Ed25519" {
-			pubKeyBytes, err := base64.RawURLEncoding.DecodeString(k.X)
+		if k.Kty == "RSA" || k.Alg == "RS256" {
+			nBytes, err := base64.RawURLEncoding.DecodeString(k.N)
 			if err != nil {
-				return nil, fmt.Errorf("failed to decode public key bytes: %w", err)
+				return nil, fmt.Errorf("failed to decode RSA modulus: %w", err)
 			}
-			return ed25519.PublicKey(pubKeyBytes), nil
+			eBytes, err := base64.RawURLEncoding.DecodeString(k.E)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode RSA exponent: %w", err)
+			}
+			return &rsa.PublicKey{
+				N: new(big.Int).SetBytes(nBytes),
+				E: int(new(big.Int).SetBytes(eBytes).Int64()),
+			}, nil
 		}
 	}
 
-	return nil, fmt.Errorf("no EdDSA key found in JWKS response")
+	return nil, fmt.Errorf("no RSA key found in JWKS response")
 }
 
-// RequireAuth returns a Gin middleware that validates EdDSA JWTs issued by the auth-service.
-// pubKey is fetched once at startup via FetchPublicKey and passed in here.
-func RequireAuth(pubKey ed25519.PublicKey) gin.HandlerFunc {
+// RequireAuth returns a Gin middleware that validates RS256 JWTs issued by the auth-service.
+func RequireAuth(pubKey *rsa.PublicKey) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
@@ -65,8 +72,8 @@ func RequireAuth(pubKey ed25519.PublicKey) gin.HandlerFunc {
 		}
 		tokenStr := strings.TrimPrefix(header, "Bearer ")
 
-		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodEd25519); !ok {
+		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 			}
 			return pubKey, nil

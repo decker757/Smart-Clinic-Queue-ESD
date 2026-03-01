@@ -41,7 +41,7 @@ async def publish_event(routing_key: str, payload: dict):
         print(f"[RabbitMQ] Failed to publish {routing_key}: {e}")
 
 
-@app.post("/composite/appointments", response_model=AppointmentResponse, status_code=201)
+@app.post("/api/composite/appointments", response_model=AppointmentResponse, status_code=201)
 async def create_appointment(
     body: CreateAppointmentRequest,
     authorization: str = Header(...),
@@ -77,7 +77,7 @@ async def create_appointment(
     return appt
 
 
-@app.get("/composite/appointments/{appointment_id}", response_model=AppointmentResponse)
+@app.get("/api/composite/appointments/{appointment_id}", response_model=AppointmentResponse)
 async def get_appointment(
     appointment_id: str,
     authorization: str = Header(...),
@@ -91,7 +91,7 @@ async def get_appointment(
     return await appointment_service.get_appointment(appointment_id, token)
 
 
-@app.delete("/composite/appointments/{appointment_id}", response_model=AppointmentResponse)
+@app.delete("/api/composite/appointments/{appointment_id}", response_model=AppointmentResponse)
 async def cancel_appointment(
     appointment_id: str,
     authorization: str = Header(...),

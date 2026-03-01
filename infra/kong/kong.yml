@@ -1,0 +1,51 @@
+_format_version: "3.0"
+_transform: true
+
+# ─── Services & Routes ───────────────────────────────────────
+# Service URLs are injected via environment variables at startup.
+# On Railway: set each *_URL to http://<service-name>.railway.internal:<port>
+
+services:
+  - name: auth-service
+    url: $AUTH_SERVICE_URL
+    routes:
+      - name: auth-route
+        paths:
+          - /api/auth
+        strip_path: false
+
+  - name: composite-appointment
+    url: $COMPOSITE_APPOINTMENT_URL
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: composite-appointment-route
+        paths:
+          - /api/composite/appointments
+        strip_path: false
+
+  - name: queue-coordinator-service
+    url: $QUEUE_COORDINATOR_URL
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: queue-route
+        paths:
+          - /api/queue
+        strip_path: false
+
+# ─── JWT Consumer ────────────────────────────────────────────
+# BETTER_AUTH_RSA_PUBLIC_KEY: RSA public key PEM extracted from
+# the auth-service JWKS endpoint (/api/auth/jwks).
+# See infra/scripts/extract-jwks-pem.sh for how to get it.
+
+consumers:
+  - username: better-auth
+    jwt_secrets:
+      - algorithm: RS256
+        key: smart-clinic
+        rsa_public_key: "$BETTER_AUTH_RSA_PUBLIC_KEY_ESCAPED"
