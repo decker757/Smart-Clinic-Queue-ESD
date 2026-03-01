@@ -19,6 +19,8 @@ export interface QueueEntry {
     doctor_id?: string
     session?: string    // morning | afternoon
     queue_number: number
-    status: string      // waiting, called, in_progress, done, skipped
+    status: string          // waiting, called, in_progress, done, skipped
+    estimated_time?: Date   // set by ETA service
     created_at: Date
+    updated_at: Date
 }
