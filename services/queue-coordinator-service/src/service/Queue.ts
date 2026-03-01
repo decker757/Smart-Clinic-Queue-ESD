@@ -60,10 +60,14 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
 
 export async function getQueuePosition(appointment_id: string){
     try{
-        const cached = await redis.get(cacheKey(appointment_id));
-        if (cached) {
-            console.log(`[Redis] cache hit for ${appointment_id}`);
-            return JSON.parse(cached);
+        try {
+            const cached = await redis.get(cacheKey(appointment_id));
+            if (cached) {
+                console.log(`[Redis] cache hit for ${appointment_id}`);
+                return JSON.parse(cached);
+            }
+        } catch {
+            console.warn("[Redis] unavailable, falling back to DB");
         }
 
         const response = await pool.query(`
@@ -76,7 +80,11 @@ export async function getQueuePosition(appointment_id: string){
             throw new Error("Appointment not in queue");
         }
 
-        await redis.setex(cacheKey(appointment_id), CACHE_TTL, JSON.stringify(response.rows[0]));
+        try {
+            await redis.setex(cacheKey(appointment_id), CACHE_TTL, JSON.stringify(response.rows[0]));
+        } catch {
+            console.warn("[Redis] unavailable, skipping cache write");
+        }
         return response.rows[0];
 
     } catch (e){
