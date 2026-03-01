@@ -23,7 +23,7 @@ async def verify_token(token: str) -> dict | None:
         payload = jwt.decode(
             token,
             signing_key.key,
-            algorithms=["EdDSA"],
+            algorithms=["RS256"],
             audience="smart-clinic-services",
             issuer="smart-clinic",
         )
