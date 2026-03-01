@@ -35,7 +35,7 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
         const queue_number = seqRows[0].queue_number;
 
         const { rows } = await pool.query(`
-            INSERT INTO queue_entries (appointment_id, patient_id, doctor_id, session, queue_number, status)
+            INSERT INTO queue.queue_entries (appointment_id, patient_id, doctor_id, session, queue_number, status)
             VALUES ($1, $2, $3, $4, $5, 'waiting')
             RETURNING *
         `, [
@@ -56,7 +56,7 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
 export async function getQueuePosition(appointment_id: string){
     try{
         const response = await pool.query(`
-            SELECT queue_number, estimated_time FROM queue_entries WHERE
+            SELECT queue_number, estimated_time FROM queue.queue_entries WHERE
             appointment_id = $1;
         `, [
             appointment_id
@@ -75,7 +75,7 @@ export async function getQueuePosition(appointment_id: string){
 export async function removeFromQueue(appointment_id: string){
     try{
         const response = await pool.query(`
-            UPDATE queue_entries SET status = 'cancelled', estimated_time = null
+            UPDATE queue.queue_entries SET status = 'cancelled', estimated_time = null
             WHERE appointment_id = $1
             RETURNING *
         `,
@@ -96,7 +96,7 @@ export async function removeFromQueue(appointment_id: string){
 export async function checkIn(appointment_id: string): Promise<QueueEntry> {
     try {
         const { rows } = await pool.query(
-            `SELECT * FROM queue_entries WHERE appointment_id = $1`,
+            `SELECT * FROM queue.queue_entries WHERE appointment_id = $1`,
             [appointment_id]
         );
         if (!rows[0]) throw new Error("Appointment not in queue");
@@ -105,7 +105,7 @@ export async function checkIn(appointment_id: string): Promise<QueueEntry> {
         if (entry.status === "waiting") {
             // Normal check-in — patient confirmed present
             const { rows: updated } = await pool.query(`
-                UPDATE queue_entries SET status = 'checked_in', updated_at = NOW()
+                UPDATE queue.queue_entries SET status = 'checked_in', updated_at = NOW()
                 WHERE appointment_id = $1 RETURNING *
             `, [appointment_id]);
             return updated[0] as QueueEntry;
@@ -121,7 +121,7 @@ export async function checkIn(appointment_id: string): Promise<QueueEntry> {
             );
             const newQueueNumber = seqRows[0].queue_number;
             const { rows: updated } = await pool.query(`
-                UPDATE queue_entries
+                UPDATE queue.queue_entries
                 SET status = 'waiting', queue_number = $2, updated_at = NOW()
                 WHERE appointment_id = $1 RETURNING *
             `, [appointment_id, newQueueNumber]);
@@ -138,7 +138,7 @@ export async function checkIn(appointment_id: string): Promise<QueueEntry> {
 export async function markNoShow(appointment_id: string): Promise<QueueEntry> {
     try {
         const { rows } = await pool.query(`
-            UPDATE queue_entries SET status = 'skipped', updated_at = NOW()
+            UPDATE queue.queue_entries SET status = 'skipped', updated_at = NOW()
             WHERE appointment_id = $1 AND status IN ('waiting', 'checked_in', 'called')
             RETURNING *
         `, [appointment_id]);
@@ -153,10 +153,10 @@ export async function markNoShow(appointment_id: string): Promise<QueueEntry> {
 export async function callNext(session: string, doctor_id?: string): Promise<QueueEntry> {
     try {
         const { rows } = await pool.query(`
-            UPDATE queue_entries
+            UPDATE queue.queue_entries
             SET status = 'called', updated_at = NOW()
             WHERE id = (
-                SELECT id FROM queue_entries
+                SELECT id FROM queue.queue_entries
                 WHERE status IN ('waiting', 'checked_in')
                   AND session = $1
                   AND ($2::uuid IS NULL OR doctor_id = $2::uuid)
@@ -180,7 +180,7 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
 
 export async function resetDailyQueue(){
     try{
-        await pool.query(`DELETE FROM queue_entries`);
+        await pool.query(`DELETE FROM queue.queue_entries`);
         await pool.query(`ALTER SEQUENCE queue.queue_number_morning_seq RESTART WITH 1`);
         await pool.query(`ALTER SEQUENCE queue.queue_number_afternoon_seq RESTART WITH 1`);
         

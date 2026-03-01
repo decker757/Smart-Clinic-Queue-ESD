@@ -128,19 +128,20 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  # queue-coordinator-service:
-  #   build:
-  #     context: ../services/queue-coordinator-service
-  #   ports:
-  #     - "3002:3002"
-  #   env_file:
-  #     - ./env/queue-coordinator.env
-  #   depends_on:
-  #     app-db:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   restart: unless-stopped
+  queue-coordinator-service:
+    build:
+      context: ..
+      dockerfile: services/queue-coordinator-service/Dockerfile
+    ports:
+      - "3002:3002"
+    env_file:
+      - ./env/queue-coordinator.env
+    depends_on:
+      app-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
   # eta-service:
   #   build:

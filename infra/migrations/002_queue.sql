@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS queue_entries (
     session         TEXT        CHECK (session IN ('morning', 'afternoon')), -- null for specific doctor bookings
     queue_number    INT         NOT NULL,
     status          TEXT        NOT NULL DEFAULT 'waiting'
-                                CHECK (status IN ('waiting', 'called', 'in_progress', 'done', 'skipped')),
+                                CHECK (status IN ('waiting', 'checked_in', 'called', 'in_progress', 'done', 'skipped', 'cancelled')),
+    estimated_time  TIMESTAMPTZ,                                                 -- set by ETA service
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
