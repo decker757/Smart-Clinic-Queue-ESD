@@ -48,4 +48,4 @@ consumers:
     jwt_secrets:
       - algorithm: RS256
         key: smart-clinic
-        rsa_public_key: $BETTER_AUTH_RSA_PUBLIC_KEY
+        rsa_public_key: "$BETTER_AUTH_RSA_PUBLIC_KEY_ESCAPED"
