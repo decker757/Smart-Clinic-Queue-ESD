@@ -18,6 +18,12 @@ export const auth = betterAuth({
     plugins: [
         bearer(),
         jwt({
+            jwks: {
+                keyPairConfig: {
+                    alg: "RS256",
+                },
+                disablePrivateKeyEncryption: true,
+            },
             jwt: {
                 issuer: "smart-clinic",
                 audience: "smart-clinic-services",
