@@ -61,7 +61,10 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
 export async function getQueuePosition(appointment_id: string){
     try{
         const cached = await redis.get(cacheKey(appointment_id));
-        if (cached) return JSON.parse(cached);
+        if (cached) {
+            console.log(`[Redis] cache hit for ${appointment_id}`);
+            return JSON.parse(cached);
+        }
 
         const response = await pool.query(`
             SELECT queue_number, estimated_time FROM queue.queue_entries WHERE
