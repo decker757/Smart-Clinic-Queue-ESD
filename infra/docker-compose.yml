@@ -1,71 +1,27 @@
 services:
 
-  # ─── API Gateway ────────────────────────────────────────────
+  # ─── API Gateway (DB-less) ───────────────────────────────────
+  # Config is baked into the image via kong.yml.template + entrypoint.sh.
+  # Copy infra/env/kong.env.example → infra/env/kong.env and fill in the RSA key.
   kong:
-    image: kong:3.9
+    build:
+      context: ..
+      dockerfile: infra/kong/Dockerfile
+    env_file:
+      - ./env/kong.env
     environment:
-      KONG_DATABASE: postgres
-      KONG_PG_HOST: kong-db
-      KONG_PG_USER: kong
-      KONG_PG_PASSWORD: kong
-      KONG_PG_DATABASE: kong
-      KONG_PROXY_ACCESS_LOG: /dev/stdout
-      KONG_ADMIN_ACCESS_LOG: /dev/stdout
-      KONG_PROXY_ERROR_LOG: /dev/stderr
-      KONG_ADMIN_ERROR_LOG: /dev/stderr
-      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      AUTH_SERVICE_URL: http://auth-service:3000
+      COMPOSITE_APPOINTMENT_URL: http://composite-appointment:8000
+      QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
     ports:
       - "8000:8000"   # proxy
       - "8001:8001"   # admin API
-    depends_on:
-      kong-migrations:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-
-  kong-migrations:
-    image: kong:3.9
-    command: kong migrations bootstrap
-    environment:
-      KONG_DATABASE: postgres
-      KONG_PG_HOST: kong-db
-      KONG_PG_USER: kong
-      KONG_PG_PASSWORD: kong
-      KONG_PG_DATABASE: kong
-    depends_on:
-      kong-db:
-        condition: service_healthy
-    restart: on-failure
-
-  kong-db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: kong
-      POSTGRES_PASSWORD: kong
-      POSTGRES_DB: kong
-    volumes:
-      - kong-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "kong"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  kong-setup:
-    image: curlimages/curl:latest
-    volumes:
-      - ./kong/setup.sh:/setup.sh
-    command: sh /setup.sh
-    env_file:
-      - ./env/auth.env
-    depends_on:
-      kong:
-        condition: service_healthy
-    restart: on-failure
 
   # ─── Message Broker ─────────────────────────────────────────
   rabbitmq:
@@ -211,14 +167,21 @@ services:
     restart: unless-stopped
 
   # ─── Frontend ───────────────────────────────────────────────
-  # frontend:
-  #   build:
-  #     context: ../frontend/vue-app
-  #   ports:
-  #     - "5173:5173"
-  #   restart: unless-stopped
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/vue-app/Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend/vue-app:/app        # mount source for hot reload
+      - frontend-node-modules:/app/node_modules  # keep container's node_modules
+    environment:
+      # Browser-side var — points at Kong on the host machine
+      VITE_API_BASE_URL: http://localhost:8000
+    restart: unless-stopped
 
 volumes:
-  kong-db-data:
   app-db-data:
   rabbitmq-data:
+  frontend-node-modules:

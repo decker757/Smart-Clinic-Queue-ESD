@@ -1,3 +1,8 @@
+# Environment variables — commit .env.development + .env.production (no secrets)
+# Only ignore files with actual secrets or personal overrides
+.env.local
+.env.*.local
+
 # Logs
 logs
 *.log

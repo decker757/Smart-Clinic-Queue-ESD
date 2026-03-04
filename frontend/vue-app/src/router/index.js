@@ -1,8 +1,48 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [],
+  routes: [
+    {
+      path: '/',
+      redirect: '/login',
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { requiresAuth: false },
+    },
+    {
+      path: '/signup',
+      name: 'signup',
+      component: () => import('@/views/SignUpView.vue'),
+      meta: { requiresAuth: false },
+    },
+    // Placeholder — replace with real dashboard view when built
+    {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('@/views/LoginView.vue'), // TODO: replace
+      meta: { requiresAuth: true },
+    },
+  ],
+})
+
+// Auth guard — redirects unauthenticated users to /login
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+
+  if (to.meta.requiresAuth && !auth.isAuthenticated) {
+    return { name: 'login' }
+  }
+
+  // Prevent authenticated users from visiting auth screens again
+  const authScreens = ['login', 'signup']
+  if (authScreens.includes(to.name) && auth.isAuthenticated) {
+    return { name: 'dashboard' }
+  }
 })
 
 export default router
