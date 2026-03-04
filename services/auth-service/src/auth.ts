@@ -10,8 +10,16 @@ pool.on("connect", (client) => {
     client.query("SET search_path TO betterauth");
 });
 
+// Allowed browser origins — comma-separated list via env var
+// e.g. CORS_ORIGIN=http://localhost:5173,https://your-frontend.com
+export const trustedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
 export const auth = betterAuth({
     database: pool,
+    trustedOrigins,
     emailAndPassword: {
         enabled: true,
     },
