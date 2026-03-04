@@ -31,7 +31,7 @@ func GetAppointments(db *sql.DB) gin.HandlerFunc {
 				start_time, session, estimated_time, queue_position, notes,
 				status, created_at, updated_at
 			FROM appointments
-			WHERE ($1 IS NULL OR patient_id = $1)
+			WHERE ($1::text IS NULL OR patient_id = $1)
 			  AND ($2::uuid IS NULL OR doctor_id = $2::uuid)
 			  AND ($3::date IS NULL OR start_time::date = $3::date)
 			ORDER BY created_at ASC

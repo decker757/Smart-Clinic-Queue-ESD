@@ -20,11 +20,10 @@ const router = createRouter({
       component: () => import('@/views/SignUpView.vue'),
       meta: { requiresAuth: false },
     },
-    // Placeholder — replace with real dashboard view when built
     {
       path: '/dashboard',
       name: 'dashboard',
-      component: () => import('@/views/LoginView.vue'), // TODO: replace
+      component: () => import('@/views/PatientDashboardView.vue'),
       meta: { requiresAuth: true },
     },
   ],

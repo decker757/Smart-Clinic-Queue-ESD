@@ -17,6 +17,21 @@ services:
   - name: composite-appointment
     url: $COMPOSITE_APPOINTMENT_URL
     plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
       - name: jwt
         config:
           key_claim_name: iss
@@ -29,9 +44,26 @@ services:
   - name: queue-coordinator-service
     url: $QUEUE_COORDINATOR_URL
     plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
       - name: jwt
         config:
           key_claim_name: iss
+          uri_param_names:
+            - token
     routes:
       - name: queue-route
         paths:

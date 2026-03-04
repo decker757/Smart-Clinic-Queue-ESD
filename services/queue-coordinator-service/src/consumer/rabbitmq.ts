@@ -1,6 +1,7 @@
 import amqp from "amqplib";
 import { AppointmentInfo } from "../model/Queue";
 import * as QueueService from "../service/Queue";
+import { broadcastQueueUpdate } from "../ws/manager";
 
 const EXCHANGE = "clinic.events";
 const QUEUE_NAME = "queue-coordinator.appointment-events";
@@ -39,7 +40,8 @@ export async function startConsumer(): Promise<void> {
                     start_time: content.start_time ? new Date(content.start_time) : undefined,
                     session: content.session ?? undefined,
                 };
-                await QueueService.addToQueue(appointment);
+                const entry = await QueueService.addToQueue(appointment);
+                broadcastQueueUpdate(entry.appointment_id, entry);
                 console.log(`[Queue] Added appointment ${content.appointment_id} to queue`);
             } else if (routingKey === "appointment.cancelled") {
                 try {
