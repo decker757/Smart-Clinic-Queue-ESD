@@ -35,19 +35,15 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
             ? "queue_number_afternoon_seq"
             : "queue_number_morning_seq";
 
-        const { rows: seqRows } = await pool.query(`SELECT NEXTVAL('queue.${sequenceName}') AS queue_number`);
-        const queue_number = seqRows[0].queue_number;
-
         const { rows } = await pool.query(`
             INSERT INTO queue.queue_entries (appointment_id, patient_id, doctor_id, session, queue_number, status)
-            VALUES ($1, $2, $3, $4, $5, 'waiting')
+            VALUES ($1, $2, $3, $4, NEXTVAL('queue.${sequenceName}'), 'waiting')
             RETURNING *
         `, [
             appointment.appointment_id,
             appointment.patient_id,
             appointment.doctor_id ?? null,
             appointment.session ?? null,
-            queue_number,
         ]);
 
         await redis.del(cacheKey(appointment.appointment_id));
@@ -58,8 +54,20 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
     }
 }
 
-export async function getQueuePosition(appointment_id: string){
+export async function getQueuePosition(appointment_id: string, callerId?: string){
     try{
+        // Ownership check: cache doesn't store patient_id, so always verify from DB
+        // when a caller identity is present.
+        if (callerId) {
+            const { rows: ownerRows } = await pool.query(
+                `SELECT patient_id FROM queue.queue_entries WHERE appointment_id = $1`,
+                [appointment_id],
+            );
+            if (ownerRows.length > 0 && ownerRows[0].patient_id !== callerId) {
+                throw new Error("Forbidden");
+            }
+        }
+
         try {
             const cached = await redis.get(cacheKey(appointment_id));
             if (cached) {
@@ -71,7 +79,7 @@ export async function getQueuePosition(appointment_id: string){
         }
 
         const response = await pool.query(`
-            SELECT queue_number, estimated_time FROM queue.queue_entries WHERE
+            SELECT queue_number, estimated_time, status FROM queue.queue_entries WHERE
             appointment_id = $1;
         `, [
             appointment_id
@@ -115,7 +123,7 @@ export async function removeFromQueue(appointment_id: string){
     }
 }
 
-export async function checkIn(appointment_id: string): Promise<QueueEntry> {
+export async function checkIn(appointment_id: string, callerId?: string): Promise<QueueEntry> {
     try {
         const { rows } = await pool.query(
             `SELECT * FROM queue.queue_entries WHERE appointment_id = $1`,
@@ -123,6 +131,10 @@ export async function checkIn(appointment_id: string): Promise<QueueEntry> {
         );
         if (!rows[0]) throw new Error("Appointment not in queue");
         const entry = rows[0] as QueueEntry;
+
+        if (callerId && entry.patient_id !== callerId) {
+            throw new Error("Forbidden");
+        }
 
         if (entry.status === "waiting") {
             // Normal check-in — patient confirmed present
@@ -135,19 +147,22 @@ export async function checkIn(appointment_id: string): Promise<QueueEntry> {
         }
 
         if (entry.status === "skipped") {
-            // Late arrival — rejoin at the back of the queue with a new number
-            const sequenceName = entry.session === "afternoon"
-                ? "queue_number_afternoon_seq"
-                : "queue_number_morning_seq";
-            const { rows: seqRows } = await pool.query(
-                `SELECT NEXTVAL('queue.${sequenceName}') AS queue_number`
-            );
-            const newQueueNumber = seqRows[0].queue_number;
+            // Late arrival — rejoin at the back of the queue with a new number.
+            // NEXTVAL is inlined so the sequence increment and the row update are
+            // a single round-trip. The AND status = 'skipped' guard makes this
+            // atomic: a concurrent check-in will match 0 rows and get an error.
             const { rows: updated } = await pool.query(`
                 UPDATE queue.queue_entries
-                SET status = 'waiting', queue_number = $2, updated_at = NOW()
-                WHERE appointment_id = $1 RETURNING *
-            `, [appointment_id, newQueueNumber]);
+                SET status = 'waiting',
+                    queue_number = CASE session
+                        WHEN 'afternoon' THEN NEXTVAL('queue.queue_number_afternoon_seq')
+                        ELSE NEXTVAL('queue.queue_number_morning_seq')
+                    END,
+                    updated_at = NOW()
+                WHERE appointment_id = $1 AND status = 'skipped'
+                RETURNING *
+            `, [appointment_id]);
+            if (!updated[0]) throw new Error("Appointment not in queue");
             await redis.del(cacheKey(appointment_id));
             return updated[0] as QueueEntry;
         }
@@ -171,6 +186,23 @@ export async function markNoShow(appointment_id: string): Promise<QueueEntry> {
         return rows[0] as QueueEntry;
     } catch (e) {
         console.error("Error marking no-show:", e);
+        throw e;
+    }
+}
+
+export async function completeAppointment(appointment_id: string): Promise<QueueEntry> {
+    try {
+        const { rows } = await pool.query(`
+            UPDATE queue.queue_entries
+            SET status = 'done', updated_at = NOW()
+            WHERE appointment_id = $1 AND status IN ('called', 'in_progress')
+            RETURNING *
+        `, [appointment_id]);
+        if (!rows[0]) throw new Error("Appointment not found or cannot be completed");
+        await redis.del(cacheKey(appointment_id));
+        return rows[0] as QueueEntry;
+    } catch (e) {
+        console.error("Error completing appointment:", e);
         throw e;
     }
 }
@@ -210,9 +242,14 @@ export async function resetDailyQueue(){
         await pool.query(`ALTER SEQUENCE queue.queue_number_morning_seq RESTART WITH 1`);
         await pool.query(`ALTER SEQUENCE queue.queue_number_afternoon_seq RESTART WITH 1`);
 
-        // Flush all cached queue positions
-        const keys = await redis.keys("queue:position:*");
-        if (keys.length > 0) await redis.del(...keys);
+        // Flush all cached queue positions via SCAN (non-blocking, O(N) spread
+        // across multiple round-trips) rather than KEYS (single O(N) blocking call).
+        let cursor = 0;
+        do {
+            const [next, keys] = await redis.scan(cursor, "MATCH", "queue:position:*", "COUNT", 100);
+            cursor = parseInt(next);
+            if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== 0);
 
     }catch (e){
         console.error("Failed to reset queue:", e);

@@ -1,6 +1,9 @@
 import json
 import aio_pika
-from fastapi import FastAPI, HTTPException, Header
+from dataclasses import dataclass
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List
 from src.config import settings
 from src.models.appointment import (
     CreateAppointmentRequest,
@@ -12,6 +15,32 @@ from src.services import auth, appointment as appointment_service
 
 app = FastAPI(title="Appointment Composite Service", version="1.0.0")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ─── Auth dependency ──────────────────────────────────────────────────────────
+
+@dataclass
+class AuthContext:
+    token: str    # raw JWT — forwarded to atomic services
+    user_id: str  # JWT sub claim — used for ownership checks
+
+
+async def require_auth(authorization: str = Header(...)) -> AuthContext:
+    """Validate the Bearer JWT and return the caller's identity + raw token."""
+    token = authorization.removeprefix("Bearer ")
+    payload = await auth.verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return AuthContext(token=token, user_id=payload["sub"])
+
+
+# ─── RabbitMQ helper ──────────────────────────────────────────────────────────
 
 async def publish_event(routing_key: str, payload: dict):
     """Publish an event to the clinic topic exchange.
@@ -41,31 +70,31 @@ async def publish_event(routing_key: str, payload: dict):
         print(f"[RabbitMQ] Failed to publish {routing_key}: {e}")
 
 
+# ─── Routes ───────────────────────────────────────────────────────────────────
+
+@app.get("/api/composite/appointments", response_model=List[AppointmentResponse])
+async def list_appointments(
+    patient_id: str = Query(..., description="Filter by patient ID"),
+    auth_ctx: AuthContext = Depends(require_auth),
+):
+    if patient_id != auth_ctx.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return await appointment_service.list_appointments(patient_id, auth_ctx.token)
+
+
 @app.post("/api/composite/appointments", response_model=AppointmentResponse, status_code=201)
 async def create_appointment(
     body: CreateAppointmentRequest,
-    authorization: str = Header(...),
+    auth_ctx: AuthContext = Depends(require_auth),
 ):
-    token = authorization.removeprefix("Bearer ")
+    if body.patient_id != auth_ctx.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
-    # 1. Verify user
-    user = await auth.verify_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    # 2. Create appointment via atomic service
     appt = await appointment_service.create_appointment(
-        AppointmentServiceRequest(
-            patient_id=body.patient_id,
-            doctor_id=body.doctor_id,
-            start_time=body.start_time,
-            session=body.session,
-            notes=body.notes,
-        ),
-        token,
+        AppointmentServiceRequest(**body.model_dump()),
+        auth_ctx.token,
     )
 
-    # 3. Publish event to RabbitMQ for queue-coordinator + notification-service
     await publish_event("appointment.booked", AppointmentBookedEvent(
         appointment_id=appt.id,
         patient_id=appt.patient_id,
@@ -80,32 +109,26 @@ async def create_appointment(
 @app.get("/api/composite/appointments/{appointment_id}", response_model=AppointmentResponse)
 async def get_appointment(
     appointment_id: str,
-    authorization: str = Header(...),
+    auth_ctx: AuthContext = Depends(require_auth),
 ):
-    token = authorization.removeprefix("Bearer ")
-
-    user = await auth.verify_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    return await appointment_service.get_appointment(appointment_id, token)
+    appt = await appointment_service.get_appointment(appointment_id, auth_ctx.token)
+    if appt.patient_id != auth_ctx.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return appt
 
 
 @app.delete("/api/composite/appointments/{appointment_id}", response_model=AppointmentResponse)
 async def cancel_appointment(
     appointment_id: str,
-    authorization: str = Header(...),
+    auth_ctx: AuthContext = Depends(require_auth),
 ):
-    token = authorization.removeprefix("Bearer ")
+    # Verify ownership before mutating — fetch first so we don't cancel blindly.
+    existing = await appointment_service.get_appointment(appointment_id, auth_ctx.token)
+    if existing.patient_id != auth_ctx.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
-    user = await auth.verify_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    appt = await appointment_service.cancel_appointment(appointment_id, auth_ctx.token)
 
-    # cancel via atomic service
-    appt = await appointment_service.cancel_appointment(appointment_id, token)
-
-    # notify queue-coordinator that appointment was cancelled
     await publish_event("appointment.cancelled", {
         "appointment_id": appointment_id,
         "patient_id": appt.patient_id,

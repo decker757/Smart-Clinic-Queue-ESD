@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import * as QueueService from "../service/Queue";
+import { broadcastQueueUpdate } from "../ws/manager";
+import { callerIdFromAuthHeader } from "../utils/jwt";
 
 const router = Router();
 
@@ -7,11 +9,14 @@ const router = Router();
 router.get("/position/:appointment_id", async (req: Request, res: Response) => {
     try {
         const appointment_id = req.params.appointment_id as string;
-        const position = await QueueService.getQueuePosition(appointment_id);
+        const callerId = callerIdFromAuthHeader(req.headers.authorization) ?? undefined;
+        const position = await QueueService.getQueuePosition(appointment_id, callerId);
         res.json(position);
     } catch (e: any) {
         if (e.message === "Appointment not in queue") {
             res.status(404).json({ error: e.message });
+        } else if (e.message === "Forbidden") {
+            res.status(403).json({ error: "Forbidden" });
         } else {
             res.status(500).json({ error: "Internal server error" });
         }
@@ -22,11 +27,15 @@ router.get("/position/:appointment_id", async (req: Request, res: Response) => {
 router.post("/checkin/:appointment_id", async (req: Request, res: Response) => {
     try {
         const appointment_id = req.params.appointment_id as string;
-        const entry = await QueueService.checkIn(appointment_id);
+        const callerId = callerIdFromAuthHeader(req.headers.authorization) ?? undefined;
+        const entry = await QueueService.checkIn(appointment_id, callerId);
+        broadcastQueueUpdate(appointment_id, entry);
         res.json(entry);
     } catch (e: any) {
         if (e.message === "Appointment not in queue") {
             res.status(404).json({ error: e.message });
+        } else if (e.message === "Forbidden") {
+            res.status(403).json({ error: "Forbidden" });
         } else if (e.message.startsWith("Cannot check in")) {
             res.status(409).json({ error: e.message });
         } else {
@@ -40,9 +49,26 @@ router.post("/no-show/:appointment_id", async (req: Request, res: Response) => {
     try {
         const appointment_id = req.params.appointment_id as string;
         const entry = await QueueService.markNoShow(appointment_id);
+        broadcastQueueUpdate(appointment_id, entry);
         res.json(entry);
     } catch (e: any) {
         if (e.message === "Appointment not found or already resolved") {
+            res.status(404).json({ error: e.message });
+        } else {
+            res.status(500).json({ error: "Internal server error" });
+        }
+    }
+});
+
+// POST /queue/complete/:appointment_id — doctor finishes consultation with a patient
+router.post("/complete/:appointment_id", async (req: Request, res: Response) => {
+    try {
+        const appointment_id = req.params.appointment_id as string;
+        const entry = await QueueService.completeAppointment(appointment_id);
+        broadcastQueueUpdate(appointment_id, entry);
+        res.json(entry);
+    } catch (e: any) {
+        if (e.message === "Appointment not found or cannot be completed") {
             res.status(404).json({ error: e.message });
         } else {
             res.status(500).json({ error: "Internal server error" });
@@ -59,6 +85,7 @@ router.post("/call-next", async (req: Request, res: Response) => {
             return;
         }
         const next = await QueueService.callNext(session, doctor_id);
+        broadcastQueueUpdate(next.appointment_id, next);
         res.json(next);
     } catch (e: any) {
         if (e.message === "No waiting patients in queue") {
