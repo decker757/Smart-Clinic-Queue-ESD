@@ -138,19 +138,20 @@ services:
   #       condition: service_healthy
   #   restart: unless-stopped
 
-  # activity-log-service:
-  #   build:
-  #     context: ../services/activity-log-service
-  #   ports:
-  #     - "3005:3005"
-  #   env_file:
-  #     - ./env/activity-log.env
-  #   depends_on:
-  #     app-db:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   restart: unless-stopped
+  activity-log-service:
+    build:
+      context: ..
+      dockerfile: services/activity-log-service/Dockerfile
+    ports:
+      - "3005:3005"
+    env_file:
+      - ./env/activity-log.env
+    depends_on:
+      app-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
   # ─── Composite Services ─────────────────────────────────────
   composite-appointment:
