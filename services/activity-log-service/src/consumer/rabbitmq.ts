@@ -57,10 +57,16 @@ export async function startConsumer(): Promise<void> {
         }
 
         try {
+            if (!content.patient_id) {
+                console.warn(`[ActivityLog] Skipping ${routingKey}: missing patient_id`);
+                channel.ack(msg);
+                return;
+            }
+
             // Build a ClinicEvent from the raw message
             const event: ClinicEvent = {
                 event_type: routingKey,
-                patient_id: content.patient_id ?? "unknown",
+                patient_id: content.patient_id,
                 appointment_id: content.appointment_id ?? undefined,
                 actor: content.actor ?? "system",
                 payload: content,

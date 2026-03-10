@@ -24,7 +24,7 @@ app.get("/health", (_req: Request, res: Response) => {
 });
 
 // Mount routes
-app.use("/", activityLogRouter);
+app.use("/api/activity-log", activityLogRouter);
 
 const PORT = parseInt(process.env.PORT || "3005");
 

@@ -41,6 +41,29 @@ services:
           - /api/composite/appointments
         strip_path: false
 
+  - name: activity-log-service
+    url: $ACTIVITY_LOG_SERVICE_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: activity-log-route
+        paths:
+          - /api/activity-log
+        strip_path: false
+
   - name: queue-coordinator-service
     url: $QUEUE_COORDINATOR_URL
     plugins:

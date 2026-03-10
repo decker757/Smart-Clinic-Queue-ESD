@@ -2,19 +2,25 @@
  * REST controller for the Activity Log service.
  *
  * Endpoints:
- *   GET /patients/:id/history              — all events for a patient
- *   GET /appointments/:id/history          — all events for an appointment
+ *   GET /api/activity-log/patients/:id/history       — all events for a patient
+ *   GET /api/activity-log/appointments/:id/history   — all events for an appointment
  */
 
 import { Router, Request, Response } from "express";
 import * as ActivityLogService from "../service/ActivityLog";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
-// GET /patients/:id/history — patient activity timeline
-router.get("/patients/:id/history", async (req: Request, res: Response) => {
+// GET /api/activity-log/patients/:id/history — patient activity timeline
+router.get("/patients/:id/history", requireAuth, async (req: Request, res: Response) => {
     try {
-        const patient_id = String(req.params.id);
+        const callerId = (req as any).callerId as string;
+        if (callerId !== req.params.id) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const patient_id = req.params.id;
         const limit = parseInt(String(req.query.limit)) || 50;
         const offset = parseInt(String(req.query.offset)) || 0;
 
@@ -26,11 +32,14 @@ router.get("/patients/:id/history", async (req: Request, res: Response) => {
     }
 });
 
-// GET /appointments/:id/history — full lifecycle of one appointment
-router.get("/appointments/:id/history", async (req: Request, res: Response) => {
+// GET /api/activity-log/appointments/:id/history — full lifecycle of one appointment
+// Ownership enforced: only returns entries where patient_id matches the caller's JWT sub
+router.get("/appointments/:id/history", requireAuth, async (req: Request, res: Response) => {
     try {
-        const appointment_id = String(req.params.id);
-        const logs = await ActivityLogService.getAppointmentHistory(appointment_id);
+        const callerId = (req as any).callerId as string;
+        const appointment_id = req.params.id;
+
+        const logs = await ActivityLogService.getAppointmentHistory(appointment_id, callerId);
         res.json(logs);
     } catch (e) {
         console.error("Error fetching appointment history:", e);

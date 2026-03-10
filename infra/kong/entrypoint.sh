@@ -7,7 +7,7 @@ set -e
 export BETTER_AUTH_RSA_PUBLIC_KEY_ESCAPED=$(printf '%s' "$BETTER_AUTH_RSA_PUBLIC_KEY" | awk '{printf "%s\\n", $0}')
 
 # Substitute all env vars into the kong.yml template
-envsubst '$AUTH_SERVICE_URL $COMPOSITE_APPOINTMENT_URL $QUEUE_COORDINATOR_URL $BETTER_AUTH_RSA_PUBLIC_KEY_ESCAPED' \
+envsubst '$AUTH_SERVICE_URL $COMPOSITE_APPOINTMENT_URL $QUEUE_COORDINATOR_URL $ACTIVITY_LOG_SERVICE_URL $BETTER_AUTH_RSA_PUBLIC_KEY_ESCAPED' \
   < /etc/kong/kong.yml.template \
   > /etc/kong/kong.yml
 

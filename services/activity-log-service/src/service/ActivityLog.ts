@@ -41,13 +41,14 @@ export async function getPatientHistory(
 }
 
 export async function getAppointmentHistory(
-    appointment_id: string
+    appointment_id: string,
+    patient_id: string
 ): Promise<ActivityLogEntry[]> {
     const { rows } = await pool.query(
         `SELECT * FROM activity_log.logs
-         WHERE appointment_id = $1
+         WHERE appointment_id = $1 AND patient_id = $2
          ORDER BY created_at ASC`,
-        [appointment_id]
+        [appointment_id, patient_id]
     );
     return rows as ActivityLogEntry[];
 }
