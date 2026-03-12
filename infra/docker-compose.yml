@@ -101,6 +101,7 @@ services:
       dockerfile: services/queue-coordinator-service/Dockerfile
     ports:
       - "3002:3002"
+      - "50052:50052"
     env_file:
       - ./env/queue-coordinator.env
     depends_on:

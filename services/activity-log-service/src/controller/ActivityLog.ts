@@ -36,8 +36,8 @@ router.get("/patients/:id/history", requireAuth, async (req: Request, res: Respo
 // Ownership enforced: only returns entries where patient_id matches the caller's JWT sub
 router.get("/appointments/:id/history", requireAuth, async (req: Request, res: Response) => {
     try {
-        const callerId = (req as any).callerId as string;
-        const appointment_id = req.params.id;
+        const callerId = String((req as any).callerId);
+        const appointment_id = String(req.params.id);
 
         const logs = await ActivityLogService.getAppointmentHistory(appointment_id, callerId);
         res.json(logs);
