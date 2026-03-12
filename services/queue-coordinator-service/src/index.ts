@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from "express";
 import queueRouter from "./controller/Queue";
 import { startConsumer } from "./consumer/rabbitmq";
 import { createWsServer } from "./ws/manager";
+import { startGrpcServer } from "./grpc";
 
 const app = express();
 
@@ -34,3 +35,5 @@ startConsumer().catch((e) => {
     console.error("Failed to start RabbitMQ consumer:", e);
     process.exit(1);
 });
+
+startGrpcServer();
