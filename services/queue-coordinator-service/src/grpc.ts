@@ -28,11 +28,13 @@ async function GetQueuePosition(call: any, callback: any){
 
 async function CheckIn(call: any, callback: any){
     try{
-
+        const { appointment_id, caller_id } = call.request;
+        const entry = await QueueService.checkIn(appointment_id, caller_id || undefined);
+        callback(null, entry);
     } catch (e: any){
         if (e.message === "Forbidden")
             return callback({ code: grpc.status.PERMISSION_DENIED, message: e.message });
-        if (e.message === "Cannot check in")
+        if (e.message.startsWith("Cannot check in"))
             return callback({ code: grpc.status.FAILED_PRECONDITION, message: e.message });
         callback({ code: grpc.status.INTERNAL,  message: e.message});
     }
