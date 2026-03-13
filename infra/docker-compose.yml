@@ -152,18 +152,31 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  activity-log-service:
+  # activity-log-service:
+  #   build:
+  #     context: ..
+  #     dockerfile: services/activity-log-service/Dockerfile
+  #   ports:
+  #     - "3005:3005"
+  #   env_file:
+  #     - ./env/activity-log.env
+  #   depends_on:
+  #     app-db:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+  doctor-service:
     build:
       context: ..
-      dockerfile: services/activity-log-service/Dockerfile
+      dockerfile: services/doctor-service/Dockerfile
     ports:
-      - "3005:3005"
+      - "3004:3004"
     env_file:
-      - ./env/activity-log.env
+      - ./env/doctor.env
     depends_on:
       app-db:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 
