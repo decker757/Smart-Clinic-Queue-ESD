@@ -129,19 +129,15 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # eta-service:
-  #   build:
-  #     context: ../services/eta-service
-  #   ports:
-  #     - "3003:3003"
-  #   env_file:
-  #     - ./env/eta.env
-  #   depends_on:
-  #     app-db:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   restart: unless-stopped
+  eta-service:
+    build:
+      context: ..
+      dockerfile: wrappers/eta-service/Dockerfile
+    ports:
+      - "50054:50054"
+    env_file:
+      - ./env/eta.env
+    restart: unless-stopped
 
   notification-service:
     build:
