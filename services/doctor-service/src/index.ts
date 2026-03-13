@@ -1,5 +1,8 @@
 import express, { Request, Response, NextFunction } from "express";
 import doctorRouter from "./controller/Doctor";
+import consultationRouter from "./controller/Consultation";
+import mcRouter from "./controller/MC";
+import patientRouter from "./controller/Patient";
 import { startGrpcServer } from "./grpc";
 import { config } from "./config";
 
@@ -14,7 +17,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.json());
+app.get("/health", (_req, res) => res.json({ status: "ok", service: "doctor-service" }));
 app.use("/api/doctors", doctorRouter);
+app.use("/api/doctors/consultations", consultationRouter);
+app.use("/api/doctors/mc", mcRouter);
+app.use("/api/doctors/patients", patientRouter);
 
 app.listen(config.httpPort, () => {
     console.log(`[HTTP] Doctor service running on port ${config.httpPort}`);
