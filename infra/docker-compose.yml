@@ -95,6 +95,22 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  patient-service:
+    build:
+      context: ..
+      dockerfile: services/patient-service/Dockerfile
+    ports:
+      - "3007:3007"
+      - "50053:50053"
+    env_file:
+      - ./env/patient.env
+    depends_on:
+      app-db:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    restart: unless-stopped
+
   queue-coordinator-service:
     build:
       context: ..
@@ -127,17 +143,18 @@ services:
   #       condition: service_healthy
   #   restart: unless-stopped
 
-  # notification-service:
-  #   build:
-  #     context: ../services/notification-service
-  #   ports:
-  #     - "3004:3004"
-  #   env_file:
-  #     - ./env/notification.env
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   restart: unless-stopped
+  notification-service:
+    build:
+      context: ..
+      dockerfile: wrappers/notification-service/Dockerfile
+    ports:
+      - "3004:3004"
+    env_file:
+      - ./env/notification.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
   activity-log-service:
     build:

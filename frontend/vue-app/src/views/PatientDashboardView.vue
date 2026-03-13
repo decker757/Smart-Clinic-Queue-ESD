@@ -360,6 +360,7 @@ async function handleCheckIn() {
             type="button"
             class="group bg-white border border-slate-200 rounded-2xl px-4 py-5 text-left hover:border-primary hover:shadow-sm transition-all duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
             aria-label="View and upload medical records"
+            @click="router.push('/records')"
           >
             <div class="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/12 transition-colors duration-150">
               <!-- DocumentText -->

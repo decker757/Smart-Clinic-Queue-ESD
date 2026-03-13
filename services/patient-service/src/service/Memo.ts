@@ -1,0 +1,53 @@
+import pool from "../db/pool";
+import { uploadFile } from "../storage/supabase";
+
+export interface Memo {
+    id: string;
+    patient_id: string;
+    title: string;
+    content: string | null;
+    file_url: string | null;
+    file_type: string | null;
+    created_at: Date;
+}
+
+export async function getMemos(patient_id: string): Promise<Memo[]> {
+    const { rows } = await pool.query(
+        `SELECT * FROM patients.memos
+         WHERE patient_id = $1
+         ORDER BY created_at DESC`,
+        [patient_id]
+    );
+    return rows as Memo[];
+}
+
+export async function createTextMemo(
+    patient_id: string,
+    title: string,
+    content: string
+): Promise<Memo> {
+    const { rows } = await pool.query(
+        `INSERT INTO patients.memos (patient_id, title, content)
+         VALUES ($1, $2, $3)
+         RETURNING *`,
+        [patient_id, title, content]
+    );
+    return rows[0] as Memo;
+}
+
+export async function createFileMemo(
+    patient_id: string,
+    title: string,
+    file: Express.Multer.File
+): Promise<Memo> {
+    const fileUrl = await uploadFile(patient_id, file.originalname, file.buffer, file.mimetype);
+    const fileType = file.mimetype.split("/")[1];
+
+    const { rows } = await pool.query(
+        `INSERT INTO patients.memos (patient_id, title, file_url, file_type)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [patient_id, title, fileUrl, fileType]
+    );
+    return rows[0] as Memo;
+}

@@ -1,0 +1,33 @@
+import pool from "../db/pool";
+
+export interface MedicalHistory {
+    id: string;
+    patient_id: string;
+    diagnosis: string;
+    diagnosed_at: string | null;
+    notes: string | null;
+    created_at: Date;
+}
+
+export async function getHistory(patient_id: string): Promise<MedicalHistory[]> {
+    const { rows } = await pool.query(
+        `SELECT * FROM patients.medical_history
+         WHERE patient_id = $1
+         ORDER BY created_at DESC`,
+        [patient_id]
+    );
+    return rows as MedicalHistory[];
+}
+
+export async function addHistory(
+    patient_id: string,
+    data: { diagnosis: string; diagnosed_at?: string; notes?: string }
+): Promise<MedicalHistory> {
+    const { rows } = await pool.query(
+        `INSERT INTO patients.medical_history (patient_id, diagnosis, diagnosed_at, notes)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [patient_id, data.diagnosis, data.diagnosed_at ?? null, data.notes ?? null]
+    );
+    return rows[0] as MedicalHistory;
+}
