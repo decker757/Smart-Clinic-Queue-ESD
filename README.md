@@ -1,6 +1,6 @@
 # Smart-Clinic-Queue-ESD
 
-A clinic queue management system built with an event-driven microservices architecture.
+A polyclinic queue management system built with an event-driven microservices architecture.
 
 ## Tech Stack
 
@@ -17,40 +17,98 @@ A clinic queue management system built with an event-driven microservices archit
 ## Architecture
 
 ```
-Client
+Client (Vue 3)
   │
-  ▼
+  ▼ GraphQL (planned) / REST
 Kong API Gateway  (RS256 JWT validation)
-  ├── /api/auth/*              → auth-service:3000
-  ├── /api/composite/appointments → composite-appointment:8000
-  └── /api/queue/*             → queue-coordinator-service:3002
+  ├── /api/auth/*                    → auth-service:3000
+  ├── /api/composite/appointments    → composite-appointment:8000
+  ├── /api/composite/consultation    → composite-consultation (planned)
+  └── /api/queue/*                   → queue-coordinator-service:3002
 
-composite-appointment
-  ├── calls → appointment-service:3001  (atomic)
-  └── publishes → RabbitMQ clinic.events exchange
+Composite Services
+  ├── composite-appointment          → appointment-service, RabbitMQ
+  └── composite-consultation         → patient-service, doctor-service,
+                                        appointment-service, payment-service, RabbitMQ
 
 RabbitMQ clinic.events (topic exchange)
-  ├── appointment.booked   → queue-coordinator-service
-  └── appointment.cancelled → queue-coordinator-service
-
-queue-coordinator-service
-  ├── Postgres (queue schema) — persistent queue state
-  └── Redis — cached queue positions (10s TTL)
+  ├── appointment.booked             → queue-coordinator-service
+  ├── appointment.cancelled          → queue-coordinator-service
+  └── consultation.completed         → notification-service, queue-coordinator-service,
+                                        activity-log-service
 ```
 
 ## Services
 
-| Service | Port | Language | Status |
-|---------|------|----------|--------|
-| `auth-service` | 3000 | Node.js + BetterAuth | Deployed |
-| `appointment-service` | 3001 | Go + Gin | Deployed |
-| `composite-appointment` | 8000 | Python + FastAPI | Deployed |
-| `queue-coordinator-service` | 3002 | Node.js + Express | Deployed |
-| `kong` | 8000 | Kong (DB-less) | Deployed |
-| `eta-service` | 3003 | TBD | Not started |
-| `notification-service` | 3004 | TBD | Not started |
-| `activity-log-service` | 3005 | TBD | Not started |
-| `frontend` | 5173 | Vue 3 | Not started |
+### Atomic Services
+
+| Service | Port | gRPC Port | Language | Description |
+|---------|------|-----------|----------|-------------|
+| `auth-service` | 3000 | — | Node.js + BetterAuth | Auth, JWT issuance |
+| `appointment-service` | 3001 | — | Go + Gin | Appointment lifecycle |
+| `queue-coordinator-service` | 3002 | 50052 | Node.js + Express | Queue management |
+| `patient-service` | 3007 | 50053 | Node.js + Express | Patient profiles, memos, MC/prescriptions |
+| `doctor-service` | 3006 | 50055 | Node.js + Express | Doctor profiles, slots, consultation notes |
+| `activity-log-service` | 3005 | — | Node.js + Express | Audit log |
+
+### Wrapper Services
+
+| Service | Port | gRPC Port | Language | Description |
+|---------|------|-----------|----------|-------------|
+| `eta-service` | — | 50054 | Node.js + TypeScript | Google Maps travel time |
+| `notification-service` | 3004 | — | Node.js + TypeScript | SMS/email via Twilio |
+| `payment-service` | — | — | TBD | Stripe payment links (planned) |
+
+### Composite Services
+
+| Service | Port | Language | Description |
+|---------|------|----------|-------------|
+| `composite-appointment` | 8000 | Python + FastAPI | Patient books/cancels appointments |
+| `composite-consultation` | TBD | Python + FastAPI | Doctor completes consultation, issues MC, triggers payment |
+
+### Frontend
+
+| Service | Port | Language |
+|---------|------|----------|
+| `frontend` | 5173 | Vue 3 + Vite + Tailwind CSS |
+
+## Scenarios
+
+### Scenario 1 — Patient Books Appointment
+1. Patient submits booking via frontend
+2. `composite-appointment` calls `appointment-service` → creates appointment
+3. Publishes `appointment.booked` → `queue-coordinator` adds patient to queue
+4. ETA service tracks travel time + queue wait time to notify patient when to leave
+
+### Scenario 3 — Doctor Completes Consultation
+1. Doctor submits consultation notes, MC, prescription via staff dashboard
+2. `composite-consultation` (synchronously):
+   - Calls `patient-service` → stores MC + prescription as patient records
+   - Calls `doctor-service` → stores consultation notes
+   - Calls `appointment-service` → marks appointment as `completed`
+   - Calls `payment-service` → creates Stripe payment link
+3. Publishes `consultation.completed` with payment link
+4. `notification-service` sends patient payment link + MC/prescription
+5. `queue-coordinator` removes patient from queue
+6. `activity-log-service` logs the event
+
+## Database Schemas (Supabase)
+
+| Schema | Used by | Migration |
+|--------|---------|-----------|
+| `betterauth` | auth-service | BetterAuth auto-migration |
+| `appointments` | appointment-service | `infra/migrations/001_appointments.sql` |
+| `queue` | queue-coordinator-service | `infra/migrations/002_queue.sql` |
+| `activity_log` | activity-log-service | `infra/migrations/003_activity_log.sql` |
+| `patients` | patient-service | `infra/migrations/004_patients.sql` |
+| `doctors` | doctor-service | `infra/migrations/005_doctors.sql` |
+
+### patients.memos record_type values
+| record_type | Created by | Visible to |
+|-------------|------------|------------|
+| `memo` | Patient (upload/text) | Patient |
+| `mc` | Doctor (via composite-consultation) | Patient |
+| `prescription` | Doctor (via composite-consultation) | Patient |
 
 ## Production (Railway)
 
@@ -98,14 +156,6 @@ POST /api/queue/no-show/:appointment_id
 POST /api/queue/reset
 ```
 
-## Database Schemas (Supabase)
-
-| Schema | Used by | Migration |
-|--------|---------|-----------|
-| `betterauth` | auth-service | BetterAuth auto-migration |
-| `appointments` | appointment-service | `infra/migrations/001_appointments.sql` |
-| `queue` | queue-coordinator-service | `infra/migrations/002_queue.sql` |
-
 ## Railway Environment Variables
 
 ### auth-service
@@ -134,6 +184,39 @@ POST /api/queue/reset
 | `RABBITMQ_URL` | CloudAMQP connection string |
 | `REDIS_URL` | Railway Redis connection string |
 | `PORT` | `3002` |
+
+### patient-service
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | Supabase connection string (`search_path=patients`) |
+| `AUTH_SERVICE_URL` | `http://smart-clinic-queue-esd.railway.internal:3000` |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | Supabase service role key |
+| `SUPABASE_BUCKET` | `patient-memos` |
+| `PORT` | `3007` |
+| `GRPC_PORT` | `50053` |
+
+### doctor-service
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | Supabase connection string (`search_path=doctors`) |
+| `AUTH_SERVICE_URL` | `http://smart-clinic-queue-esd.railway.internal:3000` |
+| `PORT` | `3006` |
+| `GRPC_PORT` | `50055` |
+
+### eta-service
+| Variable | Value |
+|----------|-------|
+| `GOOGLE_MAPS_API_KEY` | Google Maps API key |
+| `CLINIC_LAT` | Clinic latitude (e.g. `1.4172`) |
+| `CLINIC_LNG` | Clinic longitude (e.g. `103.8330`) |
+| `GRPC_PORT` | `50054` |
+
+### notification-service
+| Variable | Value |
+|----------|-------|
+| `RABBITMQ_URL` | CloudAMQP connection string |
+| `PATIENT_SERVICE_GRPC_URL` | `patient-service:50053` |
 
 ### kong
 | Variable | Value |
@@ -167,14 +250,14 @@ cp infra/env/auth.env.example infra/env/auth.env
 # repeat for other services, fill in Supabase + CloudAMQP credentials
 ```
 
-### 3. Start infrastructure
+### 3. Start all services
 
 ```bash
 cd infra
-docker compose up kong rabbitmq app-db
+docker compose up --build
 ```
 
-### 4. Run a service
+### 4. Run a service individually
 
 ```bash
 # auth-service
@@ -184,10 +267,22 @@ cd services/auth-service && npm install && npm run dev
 cd services/appointment-service && go run .
 
 # composite-appointment
-cd composite/appointment && pip install -r requirements.txt && uvicorn src.main:app --reload
+cd composite/appointment && pip install -r requirements.txt && uvicorn src.main:app --reload --port 8080
 
 # queue-coordinator
 cd services/queue-coordinator-service && npm install && npm run dev
+
+# patient-service
+cd services/patient-service && npm install && npm run dev
+
+# doctor-service
+cd services/doctor-service && npm install && npm run dev
+
+# eta-service
+cd wrappers/eta-service && npm install && npm run dev
+
+# notification-service
+cd wrappers/notification-service && npm install && npm run dev
 ```
 
 ## Kong Configuration
@@ -210,6 +305,14 @@ sh infra/scripts/extract-jwks-pem.sh https://your-auth-service-url.railway.app
 - **Per-service deploys** (`.github/workflows/deploy-*.yml`): auto-deploy to Railway on push to `main`
 
 > Deploy workflows only trigger on `main`. For feature branches, use `railway up --service <name> --detach` or push an empty commit after merging.
+
+## Architecture Principles
+
+- **Atomic services** do not call each other directly — all cross-service orchestration goes through composite services
+- **Composite services** call multiple atomics and publish RabbitMQ events
+- **Wrapper services** wrap external APIs (Google Maps, Stripe, Twilio) and expose gRPC or HTTP interfaces
+- **Synchronous calls** for critical state changes that must succeed before proceeding
+- **Async MQ events** for side effects (notifications, logging, queue updates)
 
 ## Contributing
 
