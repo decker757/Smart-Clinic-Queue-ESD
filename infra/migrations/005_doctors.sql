@@ -21,21 +21,13 @@ CREATE TABLE IF NOT EXISTS doctors.time_slots (
 
 CREATE TABLE IF NOT EXISTS doctors.consultations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    appointment_id UUID,
+    appointment_id UUID UNIQUE,  -- one consultation per appointment
     doctor_id UUID REFERENCES doctors.doctors(id),
-    patient_id UUID NOT NULL,
+    patient_id TEXT NOT NULL,
     notes TEXT,
     diagnosis TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS doctors.medical_certificates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    appointment_id UUID,
-    doctor_id UUID REFERENCES doctors.doctors(id),
-    patient_id UUID NOT NULL,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    reason TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
+CREATE INDEX IF NOT EXISTS idx_consultations_patient ON doctors.consultations(patient_id);
+CREATE INDEX IF NOT EXISTS idx_consultations_doctor ON doctors.consultations(doctor_id);

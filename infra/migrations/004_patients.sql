@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS patients.memos (
     content     TEXT,
     file_url    TEXT,
     file_type   TEXT,
+    record_type TEXT        NOT NULL DEFAULT 'memo',  -- 'memo' | 'mc' | 'prescription'
+    issued_by   TEXT,       -- doctor_id if record_type is mc/prescription, null for patient uploads
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

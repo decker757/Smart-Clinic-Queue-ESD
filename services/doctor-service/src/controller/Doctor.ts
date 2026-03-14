@@ -41,8 +41,9 @@ router.get("/:id/slots", async (req: Request, res: Response) => {
 router.patch("/slots/:slot_id", async (req: Request, res: Response) => {
     try {
         const { status } = req.body;
-        if (!status) {
-            res.status(400).json({ error: "status is required" });
+        const VALID_STATUSES = ["available", "booked", "blocked"];
+        if (!status || !VALID_STATUSES.includes(status)) {
+            res.status(400).json({ error: `status must be one of: ${VALID_STATUSES.join(", ")}` });
             return;
         }
         const slot = await DoctorService.updateSlotStatus(req.params.slot_id as string, status);

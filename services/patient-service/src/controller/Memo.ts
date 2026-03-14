@@ -81,4 +81,28 @@ router.post("/upload", requireAuth, (req: Request, res: Response, next) => {
     }
 });
 
+// POST /api/patients/:id/memos/doctor — called by consultation composite to store MC/prescription
+// No ownership check — caller must be authenticated (JWT verified), patient_id comes from path
+router.post("/doctor", requireAuth, async (req: Request, res: Response) => {
+    const title = req.body.title as string;
+    const content = req.body.content as string;
+    const record_type = req.body.record_type as string;
+    const issued_by = req.body.issued_by as string;
+
+    if (!title || !content || !record_type || !issued_by) {
+        return res.status(400).json({ error: "title, content, record_type, and issued_by are required" });
+    }
+    if (!["mc", "prescription"].includes(record_type)) {
+        return res.status(400).json({ error: "record_type must be 'mc' or 'prescription'" });
+    }
+
+    try {
+        const memo = await MemoService.createDoctorRecord(String(req.params.id), title, content, record_type as "mc" | "prescription", String(issued_by));
+        res.status(201).json(memo);
+    } catch (e) {
+        console.error("[Memo] createDoctorRecord error:", e);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 export default router;

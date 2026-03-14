@@ -84,7 +84,7 @@ export function startGrpcServer(): void {
         (err, port) => {
             if (err) {
                 console.error("[gRPC] Failed to start:", err);
-                return;
+                process.exit(1);
             }
             console.log(`[gRPC] Doctor service running on port ${port}`);
         }

@@ -1,10 +1,9 @@
 import express, { Request, Response, NextFunction } from "express";
 import doctorRouter from "./controller/Doctor";
 import consultationRouter from "./controller/Consultation";
-import mcRouter from "./controller/MC";
-import patientRouter from "./controller/Patient";
 import { startGrpcServer } from "./grpc";
 import { config } from "./config";
+import { fetchPublicKey, requireAuth } from "./middleware/auth";
 
 const app = express();
 
@@ -17,14 +16,20 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.json());
-app.get("/health", (_req, res) => res.json({ status: "ok", service: "doctor-service" }));
-app.use("/api/doctors", doctorRouter);
-app.use("/api/doctors/consultations", consultationRouter);
-app.use("/api/doctors/mc", mcRouter);
-app.use("/api/doctors/patients", patientRouter);
+app.get("/health", (_req: Request, res: Response) => res.json({ status: "ok", service: "doctor-service" }));
 
-app.listen(config.httpPort, () => {
-    console.log(`[HTTP] Doctor service running on port ${config.httpPort}`);
+app.use("/api/doctors", requireAuth, doctorRouter);
+app.use("/api/doctors/consultations", requireAuth, consultationRouter);
+
+async function main() {
+    await fetchPublicKey();
+    app.listen(config.httpPort, () => {
+        console.log(`[HTTP] Doctor service running on port ${config.httpPort}`);
+    });
+    startGrpcServer();
+}
+
+main().catch((err) => {
+    console.error("[Startup] Fatal:", err);
+    process.exit(1);
 });
-
-startGrpcServer();
