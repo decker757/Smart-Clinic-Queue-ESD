@@ -8,6 +8,8 @@ export interface Memo {
     content: string | null;
     file_url: string | null;
     file_type: string | null;
+    record_type: "memo" | "mc" | "prescription";
+    issued_by: string | null;
     created_at: Date;
 }
 
@@ -19,6 +21,23 @@ export async function getMemos(patient_id: string): Promise<Memo[]> {
         [patient_id]
     );
     return rows as Memo[];
+}
+
+// Called by consultation composite to store doctor-issued MC or prescription
+export async function createDoctorRecord(
+    patient_id: string,
+    title: string,
+    content: string,
+    record_type: "mc" | "prescription",
+    issued_by: string
+): Promise<Memo> {
+    const { rows } = await pool.query(
+        `INSERT INTO patients.memos (patient_id, title, content, record_type, issued_by)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [patient_id, title, content, record_type, issued_by]
+    );
+    return rows[0] as Memo;
 }
 
 export async function createTextMemo(
