@@ -23,17 +23,20 @@ Client (Vue 3)
 Kong API Gateway  (RS256 JWT validation)
   ├── /api/auth/*                    → auth-service:3000
   ├── /api/composite/appointments    → composite-appointment:8000
+  ├── /api/composite/patients        → composite-patient-orchestrator:8001
   ├── /api/composite/consultation    → composite-consultation (planned)
   └── /api/queue/*                   → queue-coordinator-service:3002
 
 Composite Services
   ├── composite-appointment          → appointment-service, RabbitMQ
+  ├── composite-patient-orchestrator → patient-service (gRPC), RabbitMQ
   └── composite-consultation         → patient-service, doctor-service,
                                         appointment-service, payment-service, RabbitMQ
 
 RabbitMQ clinic.events (topic exchange)
   ├── appointment.booked             → queue-coordinator-service
   ├── appointment.cancelled          → queue-coordinator-service
+  ├── patient.*                      → activity-log-service
   └── consultation.completed         → notification-service, queue-coordinator-service,
                                         activity-log-service
 ```
@@ -64,6 +67,7 @@ RabbitMQ clinic.events (topic exchange)
 | Service | Port | Language | Description |
 |---------|------|----------|-------------|
 | `composite-appointment` | 8000 | Python + FastAPI | Patient books/cancels appointments |
+| `composite-patient-orchestrator` | 8001 | Python + FastAPI | Patient profile, history, memos (via gRPC to patient-service) |
 | `composite-consultation` | TBD | Python + FastAPI | Doctor completes consultation, issues MC, triggers payment |
 
 ### Frontend
@@ -79,6 +83,12 @@ RabbitMQ clinic.events (topic exchange)
 2. `composite-appointment` calls `appointment-service` → creates appointment
 3. Publishes `appointment.booked` → `queue-coordinator` adds patient to queue
 4. ETA service tracks travel time + queue wait time to notify patient when to leave
+
+### Scenario 2 — Patient Views/Updates Profile
+1. Patient requests profile via frontend
+2. `composite-patient-orchestrator` verifies JWT, calls `patient-service` via gRPC
+3. Returns patient profile, history, or memos
+4. On create/update, publishes `patient.*` event → `activity-log-service` logs it
 
 ### Scenario 3 — Doctor Completes Consultation
 1. Doctor submits consultation notes, MC, prescription via staff dashboard
@@ -124,7 +134,7 @@ curl -X POST https://kong-production-5d53.up.railway.app/api/auth/sign-in/email 
 
 # 2. Exchange session token for JWT
 curl https://kong-production-5d53.up.railway.app/api/auth/token \
-  -H "Cookie: __Secure-better-auth.session_token=<session-token>"
+  -H "Authorization: Bearer <session-token>"
 
 # 3. Use JWT on protected routes
 curl -H "Authorization: Bearer <jwt>" https://kong-production-5d53.up.railway.app/api/...
@@ -177,6 +187,14 @@ POST /api/queue/reset
 | `APPOINTMENT_SERVICE_URL` | `http://laudable-nourishment.railway.internal:3001` |
 | `RABBITMQ_URL` | CloudAMQP connection string |
 
+### composite-patient-orchestrator
+| Variable | Value |
+|----------|-------|
+| `AUTH_SERVICE_URL` | `http://smart-clinic-queue-esd.railway.internal:3000` |
+| `PATIENT_SERVICE_GRPC` | `patient-service.railway.internal:50053` |
+| `RABBITMQ_URL` | CloudAMQP connection string |
+| `PORT` | `8001` |
+
 ### queue-coordinator-service
 | Variable | Value |
 |----------|-------|
@@ -223,6 +241,7 @@ POST /api/queue/reset
 |----------|-------|
 | `AUTH_SERVICE_URL` | `http://smart-clinic-queue-esd.railway.internal:3000` |
 | `COMPOSITE_APPOINTMENT_URL` | `http://appointment-composite.railway.internal:8000` |
+| `COMPOSITE_PATIENT_URL` | `http://composite-patient-orchestrator.railway.internal:8001` |
 | `QUEUE_COORDINATOR_URL` | `http://queue-coordinator-service.railway.internal:3002` |
 | `BETTER_AUTH_RSA_PUBLIC_KEY` | RSA public key PEM (from `infra/scripts/extract-jwks-pem.sh`) |
 | `PORT` | `8000` |
@@ -268,6 +287,9 @@ cd services/appointment-service && go run .
 
 # composite-appointment
 cd composite/appointment && pip install -r requirements.txt && uvicorn src.main:app --reload --port 8080
+
+# composite-patient-orchestrator
+cd composite/patient-orchestrator && pip install -r requirements.txt && uvicorn src.main:app --reload --port 8001
 
 # queue-coordinator
 cd services/queue-coordinator-service && npm install && npm run dev
