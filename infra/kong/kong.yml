@@ -41,6 +41,32 @@ services:
           - /api/composite/appointments
         strip_path: false
 
+  - name: composite-patient-orchestrator
+    url: $COMPOSITE_PATIENT_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: composite-patient-route
+        paths:
+          - /api/composite/patients
+        strip_path: false
+
   - name: patient-service
     url: $PATIENT_SERVICE_URL
     plugins:
