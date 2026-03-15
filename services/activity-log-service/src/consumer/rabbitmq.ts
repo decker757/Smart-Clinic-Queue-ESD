@@ -39,6 +39,7 @@ export async function startConsumer(): Promise<void> {
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "appointment.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "checkin.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.*");
+    await channel.bindQueue(QUEUE_NAME, EXCHANGE, "patient.*");
 
     console.log(`[RabbitMQ] Activity log listening on ${QUEUE_NAME}`);
 

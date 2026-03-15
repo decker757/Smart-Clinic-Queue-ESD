@@ -28,7 +28,6 @@ message CreatePatientRequest {
   string dob                = 3;
   string nric               = 4;
   repeated string allergies = 5;
-  string gender             = 6;
 }
 
 message UpdatePatientRequest {
@@ -37,7 +36,6 @@ message UpdatePatientRequest {
   string dob                = 3;
   string nric               = 4;
   repeated string allergies = 5;
-  string gender             = 6;
 }
 
 message PatientResponse {

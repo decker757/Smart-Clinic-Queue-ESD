@@ -12,10 +12,11 @@ services:
     environment:
       AUTH_SERVICE_URL: http://auth-service:3000
       COMPOSITE_APPOINTMENT_URL: http://composite-appointment:8000
+      COMPOSITE_PATIENT_URL: http://composite-patient-orchestrator:8001
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
     ports:
       - "8000:8000"   # proxy
-      - "8001:8001"   # admin API
+      - "8444:8001"   # admin API
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 10s
@@ -195,6 +196,21 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+    restart: unless-stopped
+
+  composite-patient-orchestrator:
+    build:
+      context: ..
+      dockerfile: composite/patient-orchestrator/Dockerfile
+    ports:
+      - "8082:8001"
+    env_file:
+      - ./env/composite-patient-orchestrator.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      patient-service:
+        condition: service_started
     restart: unless-stopped
 
   # ─── Frontend ───────────────────────────────────────────────
