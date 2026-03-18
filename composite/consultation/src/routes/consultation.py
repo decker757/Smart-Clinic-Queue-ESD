@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.models.consultation import CompleteConsultationRequest, ConsultationResponse
 from src.controller import consultation as consultation_controller
@@ -20,6 +20,13 @@ async def complete_consultation(
     Orchestrates: patient records → appointment update → queue removal
                   → payment request → event publishing
     """
+    # Authorization: ensure the authenticated user is allowed to complete this consultation
+    if getattr(auth, "user_id", None) != getattr(body, "doctor_id", None):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to complete this consultation",
+        )
+
     return await consultation_controller.complete_consultation(
         body=body,
         token=auth.token,
