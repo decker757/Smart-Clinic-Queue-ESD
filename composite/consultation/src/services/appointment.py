@@ -40,7 +40,7 @@ async def mark_complete(appointment_id: str, token: str) -> dict:
     """PATCH appointment status to 'completed'."""
     response = await _call(
         "patch",
-        f"/api/appointments/{appointment_id}",
+        f"/appointments/{appointment_id}/status",
         token,
         json={"status": "completed"},
     )
