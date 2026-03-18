@@ -205,7 +205,7 @@ async function handleCheckIn() {
           <button
             type="button"
             class="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-cta text-white text-sm font-semibold rounded-xl hover:bg-cta/90 transition-colors duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-cta"
-            @click="router.push('/book')"
+            @click="router.push('/booking')"
           >
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -293,7 +293,7 @@ async function handleCheckIn() {
           <!-- Check in CTA.
                aria-disabled keeps non-actionable states focusable for
                keyboard users so they can discover the current status. -->
-          <div class="px-5 pb-5">
+          <div class="px-5 pb-5 space-y-2">
             <button
               type="button"
               class="w-full h-11 rounded-xl font-semibold text-sm transition-colors duration-150 focus-visible:outline-3 focus-visible:outline-offset-2"
@@ -309,6 +309,15 @@ async function handleCheckIn() {
               @click="handleCheckIn"
             >
               {{ checkInLabel }}
+            </button>
+            <!-- View Queue button — shown once checked in -->
+            <button
+              v-if="appointment.status === 'checked_in' || appointment.status === 'called'"
+              type="button"
+              class="w-full h-11 rounded-xl font-semibold text-sm bg-white border border-slate-200 text-slate-700 hover:border-primary hover:text-primary transition-colors duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              @click="router.push(`/queue/${appointment.id}`)"
+            >
+              View Queue Status
             </button>
           </div>
         </div>
@@ -326,7 +335,7 @@ async function handleCheckIn() {
             type="button"
             class="group bg-white border border-slate-200 rounded-2xl px-4 py-5 text-left hover:border-primary hover:shadow-sm transition-all duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
             aria-label="Book a new appointment"
-            @click="router.push('/book')"
+            @click="router.push('/booking')"
           >
             <div class="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/12 transition-colors duration-150">
               <!-- CalendarDays + Plus -->
