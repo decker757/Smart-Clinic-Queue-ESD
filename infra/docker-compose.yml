@@ -13,6 +13,7 @@ services:
       AUTH_SERVICE_URL: http://auth-service:3000
       COMPOSITE_APPOINTMENT_URL: http://composite-appointment:8000
       COMPOSITE_PATIENT_URL: http://composite-patient-orchestrator:8001
+      COMPOSITE_CONSULTATION_URL: http://composite-consultation:8002
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
     ports:
       - "8000:8000"   # proxy
@@ -210,6 +211,25 @@ services:
       rabbitmq:
         condition: service_healthy
       patient-service:
+        condition: service_started
+    restart: unless-stopped
+
+  composite-consultation:
+    build:
+      context: ..
+      dockerfile: composite/consultation/Dockerfile
+    ports:
+      - "8083:8002"
+    env_file:
+      - ./env/composite-consultation.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      patient-service:
+        condition: service_started
+      doctor-service:
+        condition: service_started
+      appointment-service:
         condition: service_started
     restart: unless-stopped
 

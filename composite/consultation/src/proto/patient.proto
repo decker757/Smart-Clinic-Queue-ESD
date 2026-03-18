@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package patient;
+
+service PatientService {
+  rpc GetPatient         (GetPatientRequest)         returns (PatientResponse);
+  rpc CreatePatient      (CreatePatientRequest)      returns (PatientResponse);
+  rpc UpdatePatient      (UpdatePatientRequest)      returns (PatientResponse);
+
+  rpc GetHistory         (GetHistoryRequest)         returns (HistoryListResponse);
+  rpc AddHistory         (AddHistoryRequest)         returns (HistoryResponse);
+
+  rpc GetMemos           (GetMemosRequest)           returns (MemoListResponse);
+  rpc CreateTextMemo     (CreateTextMemoRequest)     returns (MemoResponse);
+  rpc CreateFileMemo     (CreateFileMemoRequest)     returns (MemoResponse);
+  rpc CreateDoctorRecord (CreateDoctorRecordRequest) returns (MemoResponse);
+}
+
+// ─── Patient ────────────────────────────────────────────────────────────────
+
+message GetPatientRequest {
+  string id = 1;
+}
+
+message CreatePatientRequest {
+  string id                 = 1;
+  string phone              = 2;
+  string dob                = 3;
+  string nric               = 4;
+  repeated string allergies = 5;
+  string gender             = 6;
+}
+
+message UpdatePatientRequest {
+  string id                 = 1;
+  string phone              = 2;
+  string dob                = 3;
+  string nric               = 4;
+  repeated string allergies = 5;
+  string gender             = 6;
+}
+
+message PatientResponse {
+  string id                 = 1;
+  string phone              = 2;
+  string dob                = 3;
+  string nric               = 4;
+  repeated string allergies = 5;
+  string gender             = 6;
+  string created_at         = 7;
+  string updated_at         = 8;
+}
+
+// ─── History ────────────────────────────────────────────────────────────────
+
+message GetHistoryRequest {
+  string patient_id = 1;
+}
+
+message AddHistoryRequest {
+  string patient_id    = 1;
+  string diagnosis     = 2;
+  string diagnosed_at  = 3; // optional, empty string if not provided
+  string notes         = 4; // optional, empty string if not provided
+}
+
+message HistoryResponse {
+  string id            = 1;
+  string patient_id    = 2;
+  string diagnosis     = 3;
+  string diagnosed_at  = 4;
+  string notes         = 5;
+  string created_at    = 6;
+}
+
+message HistoryListResponse {
+  repeated HistoryResponse entries = 1;
+}
+
+// ─── Memo ───────────────────────────────────────────────────────────────────
+
+message GetMemosRequest {
+  string patient_id = 1;
+}
+
+message CreateTextMemoRequest {
+  string patient_id = 1;
+  string title      = 2;
+  string content    = 3;
+}
+
+message CreateFileMemoRequest {
+  string patient_id    = 1;
+  string title         = 2;
+  bytes  file_data     = 3;
+  string original_name = 4;
+  string mimetype      = 5;
+}
+
+message CreateDoctorRecordRequest {
+  string patient_id   = 1;
+  string title        = 2;
+  string content      = 3;
+  string record_type  = 4; // "mc" or "prescription"
+  string issued_by    = 5;
+}
+
+message MemoResponse {
+  string id          = 1;
+  string patient_id  = 2;
+  string title       = 3;
+  string content     = 4;
+  string file_url    = 5;
+  string file_type   = 6;
+  string record_type = 7;
+  string issued_by   = 8;
+  string created_at  = 9;
+}
+
+message MemoListResponse {
+  repeated MemoResponse memos = 1;
+}
