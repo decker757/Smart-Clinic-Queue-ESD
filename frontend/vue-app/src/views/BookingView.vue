@@ -69,18 +69,31 @@ async function fetchSlots(doctorId) {
 
 async function bookAppointment() {
   if (!canBook.value) return
+
+  // Validate patient and selected slot before making the request
+  const patientId = authStore.user?.id
+  if (!patientId) {
+    error.value = 'You must be logged in to book an appointment.'
+    return
+  }
+
+  const slot = availableSlots.value.find((s) => s.id === selectedSlot.value)
+  if (!slot) {
+    error.value = 'Selected time slot is no longer available. Please choose another slot.'
+    return
+  }
+
   loading.value = true
   error.value = ''
   success.value = ''
   try {
-    const slot = availableSlots.value.find((s) => s.id === selectedSlot.value)
     const res = await fetch(`${API}/api/composite/appointments`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
-        patient_id: authStore.user?.id,
+        patient_id: patientId,
         doctor_id: selectedDoctor.value,
-        start_time: slot?.start_time,
+        start_time: slot.start_time,
       }),
     })
     if (!res.ok) {
