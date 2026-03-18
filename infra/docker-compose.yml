@@ -231,6 +231,8 @@ services:
         condition: service_started
       appointment-service:
         condition: service_started
+      queue-coordinator-service:
+        condition: service_started
     restart: unless-stopped
 
   # ─── Frontend ───────────────────────────────────────────────
