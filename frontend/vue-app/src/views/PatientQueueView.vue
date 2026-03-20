@@ -20,10 +20,15 @@ let wsHandle = null
 const appointmentId = route.params.appointmentId
 
 // ── Computed display values ──
+// queue_number is 1-based (NEXTVAL), so persons in front = queue_number - 1
+const personsInFront = computed(() =>
+  queuePosition.value ? Math.max(0, queuePosition.value.queue_number - 1) : null,
+)
+
 const positionText = computed(() => {
-  if (!queuePosition.value) return null
-  const pos = queuePosition.value.queue_number
-  if (pos <= 0) return "You're next!"
+  if (personsInFront.value === null) return null
+  const pos = personsInFront.value
+  if (pos === 0) return "You're next!"
   if (pos === 1) return '1 person in front of you'
   return `${pos} persons in front of you`
 })
@@ -42,8 +47,8 @@ const statusLabel = computed(() => {
     checked_in: 'Checked In',
     called: 'Your Turn!',
     in_progress: 'With Doctor',
-    completed: 'Done',
-    no_show: 'Missed',
+    done: 'Done',
+    cancelled: 'Cancelled',
   }
   return map[queuePosition.value.status] || queuePosition.value.status
 })
@@ -55,8 +60,8 @@ const statusColor = computed(() => {
     checked_in: 'bg-amber-100 text-amber-800',
     called: 'bg-emerald-100 text-emerald-800',
     in_progress: 'bg-primary/10 text-primary',
-    completed: 'bg-gray-100 text-gray-600',
-    no_show: 'bg-red-100 text-red-700',
+    done: 'bg-gray-100 text-gray-600',
+    cancelled: 'bg-red-100 text-red-700',
   }
   return map[queuePosition.value.status] || 'bg-gray-100 text-gray-600'
 })
@@ -158,7 +163,7 @@ onUnmounted(() => wsHandle?.close())
         <!-- Main position display -->
         <div class="p-8 text-center space-y-2">
           <div class="text-7xl font-heading font-bold text-text tabular-nums leading-none">
-            {{ queuePosition.queue_number }}
+            #{{ queuePosition.queue_number }}
           </div>
           <p class="text-base text-slate-600">
             {{ positionText }}

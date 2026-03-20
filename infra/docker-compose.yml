@@ -14,6 +14,7 @@ services:
       COMPOSITE_APPOINTMENT_URL: http://composite-appointment:8000
       COMPOSITE_PATIENT_URL: http://composite-patient-orchestrator:8001
       COMPOSITE_CONSULTATION_URL: http://composite-consultation:8002
+      DOCTOR_SERVICE_URL: http://doctor-service:3006
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
     ports:
       - "8000:8000"   # proxy

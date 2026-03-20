@@ -64,6 +64,29 @@ services:
           - /api/composite/consultations
         strip_path: false
 
+  - name: doctor-service
+    url: $DOCTOR_SERVICE_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: doctor-route
+        paths:
+          - /api/doctors
+        strip_path: false
+
   - name: composite-patient-orchestrator
     url: $COMPOSITE_PATIENT_URL
     plugins:
