@@ -32,7 +32,7 @@ func GetAppointments(db *sql.DB) gin.HandlerFunc {
 				status, created_at, updated_at
 			FROM appointments
 			WHERE ($1::text IS NULL OR patient_id = $1)
-			  AND ($2::uuid IS NULL OR doctor_id = $2::uuid)
+			  AND ($2::text IS NULL OR doctor_id = $2)
 			  AND ($3::date IS NULL OR start_time::date = $3::date)
 			ORDER BY created_at ASC
 		`, nullPatient, nullDoctor, nullDate)
@@ -125,17 +125,17 @@ func CreateAppointment(db *sql.DB) gin.HandlerFunc {
 		var a models.Appointment
 		err := db.QueryRowContext(c.Request.Context(), `
 			INSERT INTO appointments (patient_id, doctor_id, start_time, session, notes, status)
-			SELECT $1, $2::uuid, $3, $4, $5, $6
+			SELECT $1, $2::text, $3, $4, $5, $6
 			WHERE (
-				$2::uuid IS NULL
+				$2::text IS NULL
 				OR (
 					SELECT COUNT(*)
 					FROM appointments
-					WHERE doctor_id = $2::uuid
+					WHERE doctor_id = $2
 					  AND start_time = $3
 					  AND status NOT IN ('cancelled', 'no_show')
 				) < COALESCE(
-					(SELECT slot_capacity FROM doctors WHERE id = $2::uuid),
+					(SELECT slot_capacity FROM doctors WHERE id = $2),
 					3
 				)
 			)

@@ -45,6 +45,30 @@ jobs:
 
       - run: npm run test:unit -- --run
 
+  consultation-tests:
+    name: Consultation Orchestrator Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: composite/consultation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements-dev.txt
+
+      - name: Generate proto stubs
+        run: |
+          python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. \
+            src/proto/doctor.proto src/proto/patient.proto \
+            src/proto/queue.proto src/proto/payment.proto
+
+      - run: pytest
+
   secret-scan:
     name: Secret Scan
     runs-on: ubuntu-latest

@@ -41,6 +41,29 @@ services:
           - /api/composite/appointments
         strip_path: false
 
+  - name: composite-consultation
+    url: $COMPOSITE_CONSULTATION_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - POST
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: composite-consultation-route
+        paths:
+          - /api/composite/consultations
+        strip_path: false
+
   - name: composite-patient-orchestrator
     url: $COMPOSITE_PATIENT_URL
     plugins:

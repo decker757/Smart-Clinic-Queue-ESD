@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS queue_entries (
     id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     appointment_id  TEXT        NOT NULL UNIQUE,
     patient_id      TEXT        NOT NULL,
-    doctor_id       UUID,                                                    -- null until assigned (generic bookings)
+    doctor_id       TEXT,                                                    -- null until assigned (generic bookings); BetterAuth nanoid
     session         TEXT        CHECK (session IN ('morning', 'afternoon')), -- null for specific doctor bookings
     queue_number    INT         NOT NULL,
     status          TEXT        NOT NULL DEFAULT 'waiting'

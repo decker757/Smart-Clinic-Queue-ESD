@@ -84,7 +84,7 @@ export async function getQueuePosition(appointment_id: string, callerId?: string
         `, [
             appointment_id
         ]);
-        if (!response.rows[0]){
+        if (!response.rows[0] || ['done', 'cancelled'].includes(response.rows[0].status)){
             throw new Error("Appointment not in queue");
         }
 
@@ -195,7 +195,7 @@ export async function completeAppointment(appointment_id: string): Promise<Queue
         const { rows } = await pool.query(`
             UPDATE queue.queue_entries
             SET status = 'done', updated_at = NOW()
-            WHERE appointment_id = $1 AND status IN ('called', 'in_progress')
+            WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
             RETURNING *
         `, [appointment_id]);
         if (!rows[0]) throw new Error("Appointment not found or cannot be completed");
@@ -215,8 +215,13 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
             WHERE id = (
                 SELECT id FROM queue.queue_entries
                 WHERE status IN ('waiting', 'checked_in')
-                  AND session = $1
-                  AND ($2::uuid IS NULL OR doctor_id = $2::uuid)
+                  AND (
+                      -- specific-doctor booking: match by doctor_id, session is null
+                      ($2::text IS NOT NULL AND doctor_id = $2 AND session IS NULL)
+                      OR
+                      -- session-based booking: match by session, no doctor assigned
+                      ($2::text IS NULL AND session = $1)
+                  )
                 ORDER BY
                     -- checked_in patients go first (confirmed present), then waiting
                     CASE status WHEN 'checked_in' THEN 0 ELSE 1 END ASC,

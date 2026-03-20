@@ -17,6 +17,7 @@ export async function startConsumer(): Promise<void> {
     await channel.assertQueue(QUEUE_NAME, { durable: true });
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "appointment.booked");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "appointment.cancelled");
+    await channel.bindQueue(QUEUE_NAME, EXCHANGE, "consultation.completed");
 
     channel.consume(QUEUE_NAME, async (msg) => {
         if (!msg) return;
@@ -43,6 +44,18 @@ export async function startConsumer(): Promise<void> {
                 const entry = await QueueService.addToQueue(appointment);
                 broadcastQueueUpdate(entry.appointment_id, entry);
                 console.log(`[Queue] Added appointment ${content.appointment_id} to queue`);
+            } else if (routingKey === "consultation.completed") {
+                try {
+                    const entry = await QueueService.completeAppointment(content.appointment_id);
+                    broadcastQueueUpdate(entry.appointment_id, entry);
+                    console.log(`[Queue] Marked appointment ${content.appointment_id} as done`);
+                } catch (e: any) {
+                    if (e.message === "Appointment not found or cannot be completed") {
+                        console.warn(`[Queue] Appointment ${content.appointment_id} not in queue or already done`);
+                    } else {
+                        throw e;
+                    }
+                }
             } else if (routingKey === "appointment.cancelled") {
                 try {
                     await QueueService.removeFromQueue(content.appointment_id);

@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package queue;
+
+service QueueService{
+    rpc GetQueuePosition    (AppointmentRequest) returns (QueuePositionResponse);
+    rpc CheckIn             (CallerRequest)      returns (QueueEntryResponse);
+    rpc AddToQueue          (AddToQueueRequest)  returns  (QueueEntryResponse);
+    rpc RemoveFromQueue     (AppointmentRequest) returns (QueueEntryResponse);
+    rpc MarkNoShow          (AppointmentRequest) returns (QueueEntryResponse);
+    rpc CompleteAppointment(AppointmentRequest)  returns (QueueEntryResponse);
+    rpc CallNext            (CallNextRequest)    returns (QueueEntryResponse);
+}
+
+message AppointmentRequest {
+    string appointment_id = 1;
+}
+
+message CallerRequest {
+    string appointment_id = 1;
+    string caller_id = 2;
+}
+
+message AddToQueueRequest {
+    string appointment_id = 1;
+    string patient_id = 2;
+    string doctor_id = 3;
+    string session = 4;
+    string start_time = 5;
+}
+
+message CallNextRequest{
+    string session = 1;
+    string doctor_id = 2;
+}
+
+message QueuePositionResponse {
+    int32 queue_number = 1;
+    string estimated_time = 2;
+    string status = 3;
+}
+
+message QueueEntryResponse{
+    string appointment_id = 1;
+    string patient_id = 2;
+    string doctor_id = 3;
+    string session = 4;
+    int32 queue_number = 5;
+    string status = 6;
+    string estimated_time = 7;
+}
+
