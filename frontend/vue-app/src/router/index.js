@@ -27,6 +27,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/staff-dashboard',
+      name: 'staff-dashboard',
+      component: () => import('@/views/StaffDashboardView.vue'),
+      meta: { requiresAuth: true, requiresStaff: true },
+    },
+    {
       path: '/records',
       name: 'records',
       component: () => import('@/views/MedicalRecordsView.vue'),
@@ -55,9 +61,19 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
 
+  // Staff trying to access patient pages — redirect to staff dashboard
+  if (to.name === 'dashboard' && auth.isAuthenticated && auth.isStaff) {
+    return { name: 'staff-dashboard' }
+  }
+
   // Prevent authenticated users from visiting auth screens again
   const authScreens = ['login', 'signup']
   if (authScreens.includes(to.name) && auth.isAuthenticated) {
+    return auth.isStaff ? { name: 'staff-dashboard' } : { name: 'dashboard' }
+  }
+
+  // Block non-staff from accessing staff pages
+  if (to.meta.requiresStaff && !auth.isStaff) {
     return { name: 'dashboard' }
   }
 })
