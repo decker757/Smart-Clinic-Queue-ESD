@@ -1,7 +1,3 @@
-import { Pool } from "pg";
-
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-});
-
-export default pool;
+// Database connection replaced by OutSystems REST API
+// See src/service/ActivityLog.ts for the integration
+export default null;
