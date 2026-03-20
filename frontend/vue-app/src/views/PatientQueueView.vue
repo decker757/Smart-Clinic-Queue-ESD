@@ -39,6 +39,7 @@ const statusLabel = computed(() => {
   if (!queuePosition.value) return ''
   const map = {
     waiting: 'In Queue',
+    checked_in: 'Checked In',
     called: 'Your Turn!',
     in_progress: 'With Doctor',
     completed: 'Done',
@@ -51,6 +52,7 @@ const statusColor = computed(() => {
   if (!queuePosition.value) return 'bg-gray-100 text-gray-600'
   const map = {
     waiting: 'bg-amber-100 text-amber-800',
+    checked_in: 'bg-amber-100 text-amber-800',
     called: 'bg-emerald-100 text-emerald-800',
     in_progress: 'bg-primary/10 text-primary',
     completed: 'bg-gray-100 text-gray-600',

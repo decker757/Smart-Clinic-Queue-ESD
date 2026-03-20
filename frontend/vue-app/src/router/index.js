@@ -33,15 +33,9 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/booking',
-      name: 'booking',
-      component: () => import('../views/BookingView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
       path: '/queue/:appointmentId',
       name: 'queue',
-      component: () => import('../views/PatientQueueView.vue'),
+      component: () => import('@/views/PatientQueueView.vue'),
       meta: { requiresAuth: true },
     },
   ],
