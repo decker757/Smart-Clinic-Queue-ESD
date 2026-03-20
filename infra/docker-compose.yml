@@ -233,6 +233,14 @@ services:
         condition: service_started
       queue-coordinator-service:
         condition: service_started
+      payment-service:
+        condition: service_started
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ..
+      dockerfile: services/payment-service-stub/Dockerfile
     restart: unless-stopped
 
   # ─── Frontend ───────────────────────────────────────────────

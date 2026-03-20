@@ -3,7 +3,7 @@
 CREATE SCHEMA IF NOT EXISTS doctors;
 
 CREATE TABLE IF NOT EXISTS doctors.doctors (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,  -- BetterAuth nanoid (not UUID)
     name VARCHAR(255) NOT NULL,
     specialisation VARCHAR(255),
     contact VARCHAR(100),
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS doctors.doctors (
 
 CREATE TABLE IF NOT EXISTS doctors.time_slots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    doctor_id UUID REFERENCES doctors.doctors(id),
+    doctor_id TEXT REFERENCES doctors.doctors(id),
     start_time TIMESTAMPTZ NOT NULL,
     end_time TIMESTAMPTZ NOT NULL,
     status VARCHAR(50) DEFAULT 'available',
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS doctors.time_slots (
 CREATE TABLE IF NOT EXISTS doctors.consultations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     appointment_id UUID UNIQUE,  -- one consultation per appointment
-    doctor_id UUID REFERENCES doctors.doctors(id),
+    doctor_id TEXT REFERENCES doctors.doctors(id),
     patient_id TEXT NOT NULL,
     notes TEXT,
     diagnosis TEXT,

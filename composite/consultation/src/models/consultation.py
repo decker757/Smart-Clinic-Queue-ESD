@@ -1,5 +1,7 @@
-from pydantic import BaseModel
+from datetime import date
 from typing import Optional
+
+from pydantic import BaseModel
 
 
 # ─── Incoming from Staff Dashboard (frontend) ────────────────
@@ -12,7 +14,7 @@ class CompleteConsultationRequest(BaseModel):
 
     # MC (medical certificate) — optional
     mc_days: Optional[int] = None
-    mc_start_date: Optional[str] = None  # ISO date string
+    mc_start_date: Optional[date] = None
     mc_reason: Optional[str] = None
 
     # Prescription — optional

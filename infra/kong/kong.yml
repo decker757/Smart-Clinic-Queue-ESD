@@ -49,11 +49,7 @@ services:
           origins:
             - "*"
           methods:
-            - GET
             - POST
-            - PUT
-            - PATCH
-            - DELETE
             - OPTIONS
           headers:
             - Authorization

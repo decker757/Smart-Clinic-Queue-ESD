@@ -80,8 +80,8 @@ router.post("/complete/:appointment_id", async (req: Request, res: Response) => 
 router.post("/call-next", async (req: Request, res: Response) => {
     try {
         const { session, doctor_id } = req.body;
-        if (!session) {
-            res.status(400).json({ error: "session is required (morning or afternoon)" });
+        if (!session && !doctor_id) {
+            res.status(400).json({ error: "provide session (morning or afternoon) or doctor_id" });
             return;
         }
         const next = await QueueService.callNext(session, doctor_id);

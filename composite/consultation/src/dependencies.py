@@ -13,7 +13,9 @@ class AuthContext:
 
 async def require_auth(authorization: str = Header(...)) -> AuthContext:
     """Validate the Bearer JWT and return the caller's identity + raw token."""
-    token = authorization.removeprefix("Bearer ")
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+    token = authorization[7:]
     payload = await auth.verify_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")

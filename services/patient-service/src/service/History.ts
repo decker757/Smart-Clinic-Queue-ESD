@@ -23,6 +23,10 @@ export async function addHistory(
     patient_id: string,
     data: { diagnosis: string; diagnosed_at?: string; notes?: string }
 ): Promise<MedicalHistory> {
+    await pool.query(
+        `INSERT INTO patients.patients (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
+        [patient_id]
+    );
     const { rows } = await pool.query(
         `INSERT INTO patients.medical_history (patient_id, diagnosis, diagnosed_at, notes)
          VALUES ($1, $2, $3, $4)

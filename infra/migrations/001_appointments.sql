@@ -3,7 +3,7 @@ CREATE SCHEMA IF NOT EXISTS appointments;
 SET search_path TO appointments;
 
 CREATE TABLE IF NOT EXISTS doctors (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              TEXT PRIMARY KEY,  -- BetterAuth nanoid (not UUID)
     name            TEXT NOT NULL,
     specialization  TEXT NOT NULL,
     slot_capacity   INT  NOT NULL DEFAULT 3,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS doctors (
 CREATE TABLE IF NOT EXISTS appointments (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     patient_id      TEXT NOT NULL,
-    doctor_id       UUID REFERENCES doctors(id),
+    doctor_id       TEXT REFERENCES doctors(id),
     start_time      TIMESTAMPTZ,                                       -- null for session-based bookings
     session         TEXT CHECK (session IN ('morning', 'afternoon')), -- null for specific doctor bookings
     estimated_time  TIMESTAMPTZ,
@@ -29,10 +29,9 @@ CREATE TABLE IF NOT EXISTS appointments (
     )
 );
 
--- Seed a test doctor for development/testing
-INSERT INTO doctors (id, name, specialization, slot_capacity)
-VALUES ('a0000000-0000-0000-0000-000000000001', 'Dr. Test', 'General Practice', 3)
-ON CONFLICT (id) DO NOTHING;
+-- No seed data — insert a doctor record after signing up via BetterAuth:
+--   INSERT INTO appointments.doctors (id, name, specialization, slot_capacity)
+--   VALUES ('<betterauth-nanoid>', 'Dr Test', 'General Practice', 3);
 
 CREATE INDEX IF NOT EXISTS idx_appointments_doctor_start
     ON appointments(doctor_id, start_time)

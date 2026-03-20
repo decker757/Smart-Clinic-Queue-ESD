@@ -45,6 +45,24 @@ jobs:
 
       - run: npm run test:unit -- --run
 
+  consultation-tests:
+    name: Consultation Orchestrator Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: composite/consultation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements-dev.txt
+
+      - run: pytest
+
   secret-scan:
     name: Secret Scan
     runs-on: ubuntu-latest

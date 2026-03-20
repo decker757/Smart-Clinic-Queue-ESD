@@ -5,21 +5,26 @@ Implements the Scenario 3 flow from the architecture diagram:
   2. → gRPC POST MC + prescribed medication to patient-service
   3. → gRPC POST consultation notes to doctor-service (future)
   4. → HTTP PATCH mark appointment as complete via appointment-service
-  5. → gRPC POST payment request to payment-service (future)
+  5. → gRPC POST payment request to payment-service → Stripe → returns link
   6. → Publish "consultation.completed" event to RabbitMQ
        (consumed by notification-service, queue-coordinator, activity-log)
+       Queue removal happens async via RabbitMQ, NOT direct gRPC.
 """
 
 import grpc
+import logging
 from fastapi import HTTPException
 
 from src.models.consultation import CompleteConsultationRequest, ConsultationResponse
 from src.services import (
     appointment as appointment_svc,
+    doctor as doctor_svc,
     patient as patient_svc,
-    queue as queue_svc,
+    payment as payment_svc,
     rabbitmq,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def complete_consultation(
@@ -74,7 +79,20 @@ async def complete_consultation(
             )
         except grpc.RpcError as e:
             # Non-critical — log but don't fail
-            print(f"[WARN] Failed to add history: {e.details()}")
+            logger.warning("Failed to add history: %s", e.details())
+
+    # ── Step 3: Store consultation notes on doctor-service ───
+    try:
+        await doctor_svc.add_consultation_notes(
+            appointment_id=body.appointment_id,
+            doctor_id=body.doctor_id,
+            patient_id=body.patient_id,
+            notes=body.consultation_notes or "",
+            diagnosis=body.diagnosis or "",
+        )
+    except grpc.RpcError as e:
+        # Non-critical — notes not saving should not block payment/completion
+        logger.warning("Failed to store consultation notes: %s", e.details())
 
     # ── Step 4: Mark appointment as completed ────────────────
     try:
@@ -87,19 +105,22 @@ async def complete_consultation(
             detail=f"Failed to mark appointment complete: {e}",
         )
 
-    # ── Step 5: Remove from queue ────────────────────────────
-    try:
-        await queue_svc.complete_appointment(body.appointment_id)
-    except grpc.RpcError as e:
-        # Non-critical — queue may already be cleared
-        print(f"[WARN] Queue removal failed: {e.details()}")
-
-    # ── Step 6: Request payment (TODO — needs payment-service) ──
+    # ── Step 5: Request payment synchronously (payment-service → Stripe) ──
     payment_link = None
-    # When payment-service is built:
-    # payment_link = await payment_svc.create_payment_request(...)
+    try:
+        payment_link = await payment_svc.create_payment_request(
+            appointment_id=body.appointment_id,
+            patient_id=body.patient_id,
+        )
+    except grpc.RpcError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create payment request: {e.details()}",
+        )
 
-    # ── Step 7: Publish consultation.completed event ─────────
+    # ── Step 6: Publish consultation.completed event ─────────
+    # Queue removal, notification, and activity logging happen
+    # asynchronously via RabbitMQ consumers on each service.
     await rabbitmq.publish_event(
         "consultation.completed",
         {

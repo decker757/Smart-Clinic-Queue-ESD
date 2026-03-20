@@ -2,6 +2,7 @@ import path from "path";
 import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 import * as DoctorService from "./service/Doctor";
+import * as ConsultationService from "./service/Consultation";
 import { config } from "./config";
 
 const PROTO_PATH = path.join(__dirname, "proto/doctor.proto");
@@ -69,6 +70,27 @@ const handlers = {
         try {
             const doctors = await DoctorService.listDoctors();
             callback(null, { doctors: doctors.map(formatDoctor) });
+        } catch (e: any) {
+            callback({ code: grpc.status.INTERNAL, message: e.message });
+        }
+    },
+
+    AddConsultationNotes: async (call: any, callback: any) => {
+        try {
+            const consultation = await ConsultationService.createConsultation({
+                appointment_id: call.request.appointment_id,
+                doctor_id: call.request.doctor_id,
+                patient_id: call.request.patient_id,
+                notes: call.request.notes,
+                diagnosis: call.request.diagnosis,
+            });
+            callback(null, {
+                id: consultation.id,
+                appointment_id: consultation.appointment_id ?? "",
+                doctor_id: consultation.doctor_id,
+                patient_id: consultation.patient_id,
+                created_at: consultation.created_at.toISOString(),
+            });
         } catch (e: any) {
             callback({ code: grpc.status.INTERNAL, message: e.message });
         }

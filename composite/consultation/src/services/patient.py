@@ -24,7 +24,8 @@ async def create_doctor_record(
             content=content,
             record_type=record_type,
             issued_by=issued_by,
-        )
+        ),
+        timeout=10,
     )
     return response
 
@@ -42,6 +43,7 @@ async def add_history(
             diagnosis=diagnosis,
             notes=notes,
             diagnosed_at=diagnosed_at,
-        )
+        ),
+        timeout=10,
     )
     return response

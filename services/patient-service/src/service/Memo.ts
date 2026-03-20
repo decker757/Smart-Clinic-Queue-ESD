@@ -31,6 +31,11 @@ export async function createDoctorRecord(
     record_type: "mc" | "prescription",
     issued_by: string
 ): Promise<Memo> {
+    // Ensure patient row exists (BetterAuth users may not have been explicitly registered)
+    await pool.query(
+        `INSERT INTO patients.patients (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
+        [patient_id]
+    );
     const { rows } = await pool.query(
         `INSERT INTO patients.memos (patient_id, title, content, record_type, issued_by)
          VALUES ($1, $2, $3, $4, $5)

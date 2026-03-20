@@ -7,6 +7,7 @@ service DoctorService {
   rpc GetDoctorSlots (GetDoctorSlotsRequest) returns (DoctorSlotsResponse);
   rpc UpdateSlotStatus (UpdateSlotStatusRequest) returns (SlotResponse);
   rpc ListDoctors (ListDoctorsRequest) returns (DoctorsResponse);
+  rpc AddConsultationNotes (AddConsultationNotesRequest) returns (ConsultationNotesResponse);
 }
 
 message GetDoctorRequest {
@@ -46,4 +47,20 @@ message SlotResponse {
 
 message DoctorSlotsResponse {
   repeated SlotResponse slots = 1;
+}
+
+message AddConsultationNotesRequest {
+  string appointment_id = 1;
+  string doctor_id      = 2;
+  string patient_id     = 3;
+  string notes          = 4;
+  string diagnosis      = 5;
+}
+
+message ConsultationNotesResponse {
+  string id             = 1;
+  string appointment_id = 2;
+  string doctor_id      = 3;
+  string patient_id     = 4;
+  string created_at     = 5;
 }
