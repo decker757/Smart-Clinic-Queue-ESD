@@ -293,7 +293,7 @@ async function handleCheckIn() {
           <!-- Check in CTA.
                aria-disabled keeps non-actionable states focusable for
                keyboard users so they can discover the current status. -->
-          <div class="px-5 pb-5">
+          <div class="px-5 pb-5 space-y-2">
             <button
               type="button"
               class="w-full h-11 rounded-xl font-semibold text-sm transition-colors duration-150 focus-visible:outline-3 focus-visible:outline-offset-2"
@@ -309,6 +309,15 @@ async function handleCheckIn() {
               @click="handleCheckIn"
             >
               {{ checkInLabel }}
+            </button>
+            <!-- View Queue button — shown once checked in -->
+            <button
+              v-if="appointment.status === 'checked_in' || appointment.status === 'called'"
+              type="button"
+              class="w-full h-11 rounded-xl font-semibold text-sm bg-white border border-slate-200 text-slate-700 hover:border-primary hover:text-primary transition-colors duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              @click="router.push(`/queue/${appointment.id}`)"
+            >
+              View Queue Status
             </button>
           </div>
         </div>
