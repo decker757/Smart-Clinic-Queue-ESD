@@ -128,8 +128,8 @@ async def post(body=None, headers=None):
     ) as client:
         return await client.post(
             "/api/composite/consultations/complete",
-            json=body or BASE_REQUEST,
-            headers=headers or HEADERS,
+            json=BASE_REQUEST if body is None else body,
+            headers=HEADERS if headers is None else headers,
         )
 
 
@@ -256,16 +256,8 @@ async def test_diagnosis_history_failure_is_non_critical(mocks):
     mocks["publish"].assert_called_once()
 
 
-async def test_invalid_mc_start_date_rejected():
+async def test_invalid_mc_start_date_rejected(mock_auth):
     """Non-date mc_start_date is rejected by pydantic before reaching the controller."""
     body = {**BASE_REQUEST, "mc_start_date": "not-a-date"}
-    from src.main import app
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        res = await client.post(
-            "/api/composite/consultations/complete",
-            json=body,
-            headers=HEADERS,
-        )
+    res = await post(body=body)
     assert res.status_code == 422
