@@ -35,7 +35,7 @@ const router = createRouter({
     {
       path: '/booking',
       name: 'booking',
-      component: () => import('../views/BookingView.vue'),
+      component: () => import('@/views/BookingView.vue'),
       meta: { requiresAuth: true },
     },
   ],

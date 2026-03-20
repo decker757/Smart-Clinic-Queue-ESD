@@ -1,7 +1,9 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+const router = useRouter()
 const authStore = useAuthStore()
 
 // ── State ──
@@ -13,6 +15,7 @@ const loading = ref(false)
 const slotsLoading = ref(false)
 const error = ref('')
 const success = ref('')
+let slotsAbortController = null
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -49,19 +52,25 @@ async function fetchDoctors() {
 }
 
 async function fetchSlots(doctorId) {
+  // Cancel any in-flight slot request for a previously selected doctor
+  slotsAbortController?.abort()
+  slotsAbortController = new AbortController()
+
   selectedDoctor.value = doctorId
   selectedSlot.value = null
+  availableSlots.value = []
   slotsLoading.value = true
   error.value = ''
   try {
     const res = await fetch(`${API}/api/doctors/${doctorId}/slots`, {
       headers: authHeaders(),
+      signal: slotsAbortController.signal,
     })
     if (!res.ok) throw new Error('Failed to load available slots')
     const data = await res.json()
     availableSlots.value = (data.slots || data || []).filter((s) => s.status === 'available')
   } catch (e) {
-    error.value = e.message
+    if (e.name !== 'AbortError') error.value = e.message
   } finally {
     slotsLoading.value = false
   }
@@ -104,6 +113,7 @@ async function bookAppointment() {
     selectedDoctor.value = null
     selectedSlot.value = null
     availableSlots.value = []
+    setTimeout(() => router.push('/dashboard'), 1500)
   } catch (e) {
     error.value = e.message
   } finally {
