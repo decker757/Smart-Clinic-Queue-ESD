@@ -33,6 +33,12 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresStaff: true },
     },
     {
+      path: '/doctor-dashboard',
+      name: 'doctor-dashboard',
+      component: () => import('@/views/DoctorDashboardView.vue'),
+      meta: { requiresAuth: true, requiresStaff: true },
+    },
+    {
       path: '/records',
       name: 'records',
       component: () => import('@/views/MedicalRecordsView.vue'),
@@ -53,7 +59,6 @@ const router = createRouter({
   ],
 })
 
-// Auth guard — redirects unauthenticated users to /login
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
@@ -61,15 +66,17 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
 
-  // Staff trying to access patient pages — redirect to staff dashboard
+  // Staff trying to access patient pages — redirect to their dashboard
   if (to.name === 'dashboard' && auth.isAuthenticated && auth.isStaff) {
-    return { name: 'staff-dashboard' }
+    return auth.isDoctor ? { name: 'doctor-dashboard' } : { name: 'staff-dashboard' }
   }
 
   // Prevent authenticated users from visiting auth screens again
   const authScreens = ['login', 'signup']
   if (authScreens.includes(to.name) && auth.isAuthenticated) {
-    return auth.isStaff ? { name: 'staff-dashboard' } : { name: 'dashboard' }
+    if (auth.isDoctor) return { name: 'doctor-dashboard' }
+    if (auth.isStaff) return { name: 'staff-dashboard' }
+    return { name: 'dashboard' }
   }
 
   // Block non-staff from accessing staff pages

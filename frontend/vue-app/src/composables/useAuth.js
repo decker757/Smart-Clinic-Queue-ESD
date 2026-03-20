@@ -4,11 +4,6 @@ import { useAuthStore } from '@/stores/auth'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
-/**
- * Exchanges a BetterAuth session token for a signed JWT.
- * @param {string} sessionToken
- * @returns {Promise<string>} JWT
- */
 async function _exchangeForJwt(sessionToken) {
   const res = await fetch(`${API_BASE}/api/auth/token`, {
     headers: { Authorization: `Bearer ${sessionToken}` },
@@ -18,10 +13,6 @@ async function _exchangeForJwt(sessionToken) {
   return token
 }
 
-/**
- * Composable encapsulating all auth side-effects.
- * Keeps API calls out of components and the Pinia store.
- */
 export function useAuth() {
   const authStore = useAuthStore()
   const router = useRouter()
@@ -29,10 +20,6 @@ export function useAuth() {
   const loading = ref(false)
   const error = ref('')
 
-  /**
-   * Wraps any auth operation with shared loading/error/finally handling.
-   * @param {() => Promise<void>} fn
-   */
   async function _withAuthFlow(fn) {
     loading.value = true
     error.value = ''
@@ -42,6 +29,15 @@ export function useAuth() {
       error.value = e.message
     } finally {
       loading.value = false
+    }
+  }
+
+  function _redirectAfterLogin() {
+    // Redirect based on role
+    if (authStore.isStaff) {
+      router.push('/doctor-dashboard')
+    } else {
+      router.push('/dashboard')
     }
   }
 
@@ -62,7 +58,7 @@ export function useAuth() {
       const { token: sessionToken, user } = await res.json()
       const jwt = await _exchangeForJwt(sessionToken)
       authStore.setAuth(jwt, user)
-      router.push('/dashboard')
+      _redirectAfterLogin()
     })
   }
 
@@ -82,7 +78,7 @@ export function useAuth() {
       const { token: sessionToken, user } = await res.json()
       const jwt = await _exchangeForJwt(sessionToken)
       authStore.setAuth(jwt, user)
-      router.push('/dashboard')
+      _redirectAfterLogin()
     })
   }
 

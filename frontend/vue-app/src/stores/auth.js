@@ -9,19 +9,29 @@ import { ref, computed } from 'vue'
 export const useAuthStore = defineStore('auth', () => {
   const jwt = ref(null)
   const user = ref(null)
+  const role = ref(null)
 
   const isAuthenticated = computed(() => !!jwt.value)
-  const isStaff = computed(() => ['staff', 'doctor', 'admin'].includes(user.value?.role))
+  const isDoctor = computed(() => role.value === 'doctor')
+  const isStaff = computed(() => ['staff', 'doctor', 'admin'].includes(role.value))
 
   function setAuth(token, userData) {
     jwt.value = token
     user.value = userData
+    // Decode role from JWT payload
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      role.value = payload.role ?? null
+    } catch {
+      role.value = null
+    }
   }
 
   function clearAuth() {
     jwt.value = null
     user.value = null
+    role.value = null
   }
 
-  return { jwt, user, isAuthenticated, isStaff, setAuth, clearAuth }
+  return { jwt, user, role, isAuthenticated, isDoctor, isStaff, setAuth, clearAuth }
 })
