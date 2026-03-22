@@ -10,6 +10,7 @@ class CreateAppointmentRequest(BaseModel):
     doctor_id: str | None = None
     start_time: datetime | None = None                       # required for specific doctor bookings
     session: Literal["morning", "afternoon"] | None = None  # required for generic bookings
+    slot_id: str | None = None                              # time slot to mark as booked
     notes: str | None = None
 
     @model_validator(mode="after")

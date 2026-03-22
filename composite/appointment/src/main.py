@@ -91,9 +91,12 @@ async def create_appointment(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     appt = await appointment_service.create_appointment(
-        AppointmentServiceRequest(**body.model_dump()),
+        AppointmentServiceRequest(**body.model_dump(exclude={"slot_id"})),
         auth_ctx.token,
     )
+
+    if body.slot_id:
+        await appointment_service.mark_slot_booked(body.slot_id, auth_ctx.token)
 
     await publish_event("appointment.booked", AppointmentBookedEvent(
         appointment_id=appt.id,

@@ -27,11 +27,27 @@ router.get("/:id", async (req: Request, res: Response) => {
     }
 });
 
-// GET /api/doctors/:id/slots — get available slots (used in Scenario 1, step 5b)
+// GET /api/doctors/:id/slots?date=YYYY-MM-DD — get available slots filtered by date
 router.get("/:id/slots", async (req: Request, res: Response) => {
     try {
-        const slots = await DoctorService.getDoctorSlots(req.params.id as string);
+        const date = req.query.date as string | undefined;
+        const slots = await DoctorService.getDoctorSlots(req.params.id as string, date);
         res.json(slots);
+    } catch (e) {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// POST /api/doctors/:id/slots/generate — generate 15-min slots over a date range
+router.post("/:id/slots/generate", async (req: Request, res: Response) => {
+    try {
+        const { start_date, end_date } = req.body;
+        if (!start_date || !end_date) {
+            res.status(400).json({ error: "start_date and end_date are required (YYYY-MM-DD)" });
+            return;
+        }
+        const result = await DoctorService.generateSlots(req.params.id as string, start_date, end_date);
+        res.status(201).json(result);
     } catch (e) {
         res.status(500).json({ error: "Internal server error" });
     }
