@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package eta;
+
+service ETAService {
+  rpc GetTravelTime (TravelTimeRequest) returns (TravelTimeResponse);
+}
+
+message TravelTimeRequest {
+  double origin_lat  = 1;
+  double origin_lng  = 2;
+  double dest_lat    = 3;
+  double dest_lng    = 4;
+}
+
+message TravelTimeResponse {
+  int32  travel_minutes = 1;
+  string mode           = 2; // "transit" | "walking" | "stub"
+  string source         = 3; // "google_maps" | "stub"
+}

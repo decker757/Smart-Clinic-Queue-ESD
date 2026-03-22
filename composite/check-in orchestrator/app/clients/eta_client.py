@@ -9,12 +9,18 @@ async def get_travel_time(patient_location, clinic_location):
 
         stub = eta_pb2_grpc.ETAServiceStub(channel)
 
+        request = eta_pb2.TravelTimeRequest(
+            
+            origin_lat = patient_location.lat,
+            origin_lng = patient_location.lng,
+            dest_lat   = clinic_location.lat,
+            dest_lng   = clinic_location.lng
+
+        )
+
         response = await stub.GetTravelTime(
-            eta_pb2.TravelRequest(
-                patient_location=patient_location,
-                clinic_location=clinic_location,
-            ),
+            request,
             timeout=2.0
         )
 
-        return response.minutes
+        return response.travel_minutes

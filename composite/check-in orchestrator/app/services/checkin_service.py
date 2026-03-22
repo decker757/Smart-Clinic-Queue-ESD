@@ -2,7 +2,10 @@ from datetime import datetime, timedelta, timezone
 from app.clients.eta_client import get_travel_time
 from app.messaging.publisher import publish_event
 
-async def process_check_in(body, auth_ctx):
+
+async def process_check_in(body
+                        #    , auth_ctx
+                           ):
     eta_minutes = await get_travel_time(
         body.patient_location,
         body.clinic_location

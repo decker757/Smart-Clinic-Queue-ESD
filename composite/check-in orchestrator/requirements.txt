@@ -1,7 +1,8 @@
-fastapi==0.111.1           # FastAPI framework
-uvicorn[standard]==0.23.2  # ASGI server for running FastAPI async
-pydantic==2.2.1            # For request/response schemas
-aio-pika==9.3.2             # Async RabbitMQ client
-grpcio==1.59.1              # gRPC runtime
-grpcio-tools==1.59.1        # Needed if generating gRPC stubs from proto
-python-dotenv==1.0.0        # Load .env variables into settings
+fastapi
+uvicorn[standard]
+pydantic
+aio-pika
+grpcio
+grpcio-tools
+python-dotenv
+pydantic-settings
