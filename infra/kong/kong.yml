@@ -187,6 +187,34 @@ services:
           - /api/activity-log
         strip_path: false
 
+  - name: check-in-orchestrator
+    url: $CHECKIN_ORCHESTRATOR_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - POST
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: check-in-route
+        paths:
+          - /check-in
+        strip_path: false
+
+      - name: check-in-confirm-route
+        paths:
+          - /check-in/confirm
+        strip_path: false
+
   - name: queue-coordinator-service
     url: $QUEUE_COORDINATOR_URL
     plugins:

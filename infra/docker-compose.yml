@@ -17,6 +17,7 @@ services:
       COMPOSITE_STAFF_URL: http://composite-staff-orchestrator:8004
       DOCTOR_SERVICE_URL: http://doctor-service:3006
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
+      CHECKIN_ORCHESTRATOR_URL: http://checkin-orchestrator:8000
     ports:
       - "8000:8000"   # proxy
       - "8444:8001"   # admin API
@@ -200,6 +201,14 @@ services:
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped
+
+  checkin-orchestrator:
+    build: ./checkin-orchestrator
+    container_name: checkin-orchestrator
+    ports:
+      - "8085:8000"  # HOST_PORT:CONTAINER_PORT
+    environment:
+      - CHECKIN_ORCHESTRATOR_URL=http://checkin-orchestrator:8000
 
   composite-patient-orchestrator:
     build:
