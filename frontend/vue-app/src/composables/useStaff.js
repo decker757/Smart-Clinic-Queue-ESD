@@ -74,6 +74,15 @@ export function useStaff() {
     return res.json()
   }
 
+  async function fetchQueue() {
+    const res = await fetch(
+      `${API_BASE}/api/queue/active`,
+      { headers: authHeaders(authStore.jwt) },
+    )
+    if (!res.ok) throw new Error('Failed to fetch queue')
+    return res.json()
+  }
+
   async function fetchDoctors() {
     const res = await fetch(
       `${API_BASE}/api/composite/staff/doctors`,
@@ -89,6 +98,7 @@ export function useStaff() {
     markNoShow,
     removeFromQueue,
     fetchPatient,
+    fetchQueue,
     fetchDoctors,
   }
 }

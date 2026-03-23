@@ -10,7 +10,7 @@ const authStore = useAuthStore()
 const showOnboarding = ref(false)
 
 async function checkProfile() {
-  if (!authStore.isAuthenticated || !authStore.user?.id) return
+  if (!authStore.isAuthenticated || !authStore.user?.id || authStore.isStaff) return
   try {
     const res = await fetch(`${API_BASE}/api/patients/${authStore.user.id}`, {
       headers: { Authorization: `Bearer ${authStore.jwt}` },

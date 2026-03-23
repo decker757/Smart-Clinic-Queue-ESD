@@ -1,8 +1,10 @@
 import grpc
+import httpx
 from fastapi import HTTPException
 from google.protobuf.json_format import MessageToDict
 from src.models.queue import AddToQueueRequest, CallNextRequest
 from src.services import queue as queue_service, rabbitmq
+from src.config import settings
 
 
 def _msg(proto):
@@ -53,17 +55,28 @@ async def add_to_queue(body: AddToQueueRequest):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def remove_from_queue(appointment_id: str):
+async def remove_from_queue(appointment_id: str, token: str):
     try:
         result = await queue_service.remove_from_queue(appointment_id)
-        await rabbitmq.publish_event("staff.patient_removed_from_queue", {
-            "appointment_id": appointment_id,
-        })
-        return _msg(result)
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Appointment not found in queue")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+    # Cancel the appointment in the appointment-service so the patient's
+    # dashboard no longer shows it as active.
+    async with httpx.AsyncClient() as client:
+        resp = await client.delete(
+            f"{settings.APPOINTMENT_SERVICE_URL}/appointments/{appointment_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if resp.status_code not in (200, 204, 404):
+            raise HTTPException(status_code=502, detail="Failed to cancel appointment")
+
+    await rabbitmq.publish_event("staff.patient_removed_from_queue", {
+        "appointment_id": appointment_id,
+    })
+    return _msg(result)
 
 
 async def mark_no_show(appointment_id: str):

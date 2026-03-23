@@ -3,7 +3,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAuth } from '@/composables/useAuth'
 import { useStaff } from '@/composables/useStaff'
+import { wsBase } from '@/composables/useAppointment'
 import AppAlert from '@/components/ui/AppAlert.vue'
+
+const TERMINAL = new Set(['done', 'cancelled'])
 
 const authStore = useAuthStore()
 const { signOut } = useAuth()
@@ -28,8 +31,10 @@ const showPatientModal = ref(false)
 const patientLoading = ref(false)
 const actionLoadingId = ref(null) // tracks which row is loading
 
-let pollTimer = null
-const POLL_MS = 15_000
+let queueWs = null
+let reconnectTimer = null
+let reconnectAttempt = 0
+const MAX_RECONNECT_DELAY = 30_000
 
 // ─── Computed ─────────────────────────────────────────────────────────────────
 const greeting = computed(() => {
@@ -48,81 +53,99 @@ const queueStats = computed(() => ({
   called:    queue.value.filter((q) => q.status === 'called').length,
 }))
 
+const STATUS_BADGE = {
+  waiting:    { label: 'Waiting',    classes: 'bg-amber-100 text-amber-700' },
+  checked_in: { label: 'Checked In', classes: 'bg-emerald-100 text-emerald-700' },
+  called:     { label: 'Called',     classes: 'bg-primary/10 text-primary' },
+  no_show:    { label: 'No Show',    classes: 'bg-red-100 text-red-600' },
+  completed:  { label: 'Completed',  classes: 'bg-slate-100 text-slate-500' },
+}
+
 function statusBadge(status) {
-  const map = {
-    waiting:    { label: 'Waiting',    classes: 'bg-amber-100 text-amber-700' },
-    checked_in: { label: 'Checked In', classes: 'bg-emerald-100 text-emerald-700' },
-    called:     { label: 'Called',     classes: 'bg-primary/10 text-primary' },
-    no_show:    { label: 'No Show',    classes: 'bg-red-100 text-red-600' },
-    completed:  { label: 'Completed',  classes: 'bg-slate-100 text-slate-500' },
-  }
-  return map[status] ?? { label: status, classes: 'bg-slate-100 text-slate-500' }
+  return STATUS_BADGE[status] ?? { label: status, classes: 'bg-slate-100 text-slate-500' }
 }
 
 // ─── Data loading ─────────────────────────────────────────────────────────────
-async function loadDashboard() {
+async function loadDoctors() {
   try {
-    const doctorsData = await fetchDoctors()
-    doctors.value = doctorsData ?? []
-    error.value = ''
+    doctors.value = (await fetchDoctors()) ?? []
   } catch {
-    error.value = 'Could not load dashboard. Please refresh.'
-  } finally {
-    loading.value = false
+    error.value = 'Could not load doctors. Please refresh.'
   }
+}
+
+function connectQueueSocket() {
+  loading.value = true
+  const url = `${wsBase()}/api/queue/ws/staff?token=${authStore.jwt}`
+  const ws = new WebSocket(url)
+
+  ws.addEventListener('open', () => {
+    reconnectAttempt = 0
+    error.value = ''
+  })
+
+  ws.addEventListener('message', (event) => {
+    try {
+      const msg = JSON.parse(event.data)
+      if (msg.type === 'snapshot') {
+        queue.value = msg.entries ?? []
+        loading.value = false
+      } else if (msg.type === 'update') {
+        const entry = msg.entry
+        if (TERMINAL.has(entry.status)) {
+          queue.value = queue.value.filter((q) => q.appointment_id !== entry.appointment_id)
+        } else {
+          const idx = queue.value.findIndex((q) => q.appointment_id === entry.appointment_id)
+          if (idx !== -1) queue.value[idx] = entry
+          else queue.value = [...queue.value, entry].sort((a, b) => a.queue_number - b.queue_number)
+        }
+      }
+    } catch {
+      // malformed frame — ignore
+    }
+  })
+
+  ws.addEventListener('close', ({ code }) => {
+    loading.value = false
+    if (code === 1008) return // bad auth — don't retry
+    error.value = 'Lost connection to queue. Reconnecting...'
+    const delay = Math.min(1_000 * 2 ** reconnectAttempt, MAX_RECONNECT_DELAY)
+    reconnectAttempt++
+    reconnectTimer = setTimeout(connectQueueSocket, delay)
+  })
+
+  ws.addEventListener('error', () => {
+    loading.value = false
+  })
+
+  queueWs = ws
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
-async function handleCheckIn(appointmentId) {
+async function handleQueueAction(appointmentId, action, successMsg, newStatus) {
   actionError.value = ''
   actionSuccess.value = ''
   actionLoadingId.value = appointmentId
   try {
-    await checkInPatient(appointmentId)
-    actionSuccess.value = 'Patient checked in successfully!'
+    await action(appointmentId)
+    actionSuccess.value = successMsg
     setTimeout(() => { actionSuccess.value = '' }, 3000)
-    // Update local queue state
-    const entry = queue.value.find((q) => q.appointment_id === appointmentId)
-    if (entry) entry.status = 'checked_in'
+    if (newStatus) {
+      const entry = queue.value.find((q) => q.appointment_id === appointmentId)
+      if (entry) entry.status = newStatus
+    } else {
+      queue.value = queue.value.filter((q) => q.appointment_id !== appointmentId)
+    }
   } catch (e) {
-    actionError.value = e.message ?? 'Failed to check in patient'
+    actionError.value = e.message ?? 'Action failed'
   } finally {
     actionLoadingId.value = null
   }
 }
 
-async function handleNoShow(appointmentId) {
-  actionError.value = ''
-  actionSuccess.value = ''
-  actionLoadingId.value = appointmentId
-  try {
-    await markNoShow(appointmentId)
-    actionSuccess.value = 'Patient marked as no-show.'
-    setTimeout(() => { actionSuccess.value = '' }, 3000)
-    const entry = queue.value.find((q) => q.appointment_id === appointmentId)
-    if (entry) entry.status = 'no_show'
-  } catch (e) {
-    actionError.value = e.message ?? 'Failed to mark no-show'
-  } finally {
-    actionLoadingId.value = null
-  }
-}
-
-async function handleRemove(appointmentId) {
-  actionError.value = ''
-  actionSuccess.value = ''
-  actionLoadingId.value = appointmentId
-  try {
-    await removeFromQueue(appointmentId)
-    actionSuccess.value = 'Patient removed from queue.'
-    setTimeout(() => { actionSuccess.value = '' }, 3000)
-    queue.value = queue.value.filter((q) => q.appointment_id !== appointmentId)
-  } catch (e) {
-    actionError.value = e.message ?? 'Failed to remove patient'
-  } finally {
-    actionLoadingId.value = null
-  }
-}
+const handleCheckIn = (id) => handleQueueAction(id, checkInPatient,  'Patient checked in successfully!', 'checked_in')
+const handleNoShow  = (id) => handleQueueAction(id, markNoShow,       'Patient marked as no-show.',       'no_show')
+const handleRemove  = (id) => handleQueueAction(id, removeFromQueue,  'Patient removed from queue.',      null)
 
 async function handleViewPatient(patientId) {
   if (!patientId) return
@@ -140,12 +163,13 @@ async function handleViewPatient(patientId) {
 }
 
 onMounted(() => {
-  loadDashboard()
-  pollTimer = setInterval(loadDashboard, POLL_MS)
+  loadDoctors()
+  connectQueueSocket()
 })
 
 onUnmounted(() => {
-  clearInterval(pollTimer)
+  clearTimeout(reconnectTimer)
+  queueWs?.close()
 })
 </script>
 
@@ -432,7 +456,7 @@ onUnmounted(() => {
               <div>
                 <p class="font-heading font-semibold text-text">{{ selectedPatient.nric }}</p>
                 <p class="text-sm text-slate-500">
-                  {{ selectedPatient.gender ?? '—' }} · DOB: {{ selectedPatient.dob ?? '—' }}
+                  {{ { M: 'Male', F: 'Female' }[selectedPatient.gender] ?? selectedPatient.gender ?? '—' }} · DOB: {{ selectedPatient.dob ? new Date(selectedPatient.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—' }}
                 </p>
                 <p class="text-sm text-slate-500">{{ selectedPatient.phone ?? '—' }}</p>
               </div>

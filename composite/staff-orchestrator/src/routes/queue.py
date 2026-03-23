@@ -23,7 +23,7 @@ async def add_to_queue(body: AddToQueueRequest, auth: AuthContext = Depends(requ
 
 @router.delete("/{appointment_id}")
 async def remove_from_queue(appointment_id: str, auth: AuthContext = Depends(require_staff)):
-    return await queue_controller.remove_from_queue(appointment_id)
+    return await queue_controller.remove_from_queue(appointment_id, token=auth.token)
 
 
 @router.patch("/{appointment_id}/no-show")
