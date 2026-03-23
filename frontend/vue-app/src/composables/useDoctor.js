@@ -47,17 +47,28 @@ export function useDoctor() {
     return res.json()
   }
 
-  async function completeAppointment(appointmentId) {
+  async function completeConsultation({ appointmentId, patientId, doctorId, diagnosis, consultationNotes, prescribedMedication, mcDays, mcStartDate, mcReason }) {
     const res = await fetch(
-      `${API_BASE}/api/composite/staff/queue/${appointmentId}/complete`,
+      `${API_BASE}/api/composite/consultations/complete`,
       {
-        method: 'PATCH',
-        headers: authHeaders(authStore.jwt),
+        method: 'POST',
+        headers: { ...authHeaders(authStore.jwt), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appointment_id: appointmentId,
+          patient_id: patientId,
+          doctor_id: doctorId,
+          diagnosis: diagnosis || null,
+          consultation_notes: consultationNotes || null,
+          prescribed_medication: prescribedMedication || null,
+          mc_days: mcDays || null,
+          mc_start_date: mcStartDate || null,
+          mc_reason: mcReason || null,
+        }),
       },
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Failed to complete appointment')
+      throw new Error(body.detail ?? 'Failed to complete consultation')
     }
     return res.json()
   }
@@ -86,7 +97,7 @@ export function useDoctor() {
     fetchDoctorInfo,
     fetchDoctorSlots,
     callNextPatient,
-    completeAppointment,
+    completeConsultation,
     fetchPatient,
     fetchPatientHistory,
   }

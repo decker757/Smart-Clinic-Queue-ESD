@@ -33,12 +33,9 @@ export function useAuth() {
   }
 
   function _redirectAfterLogin() {
-    // Redirect based on role
-    if (authStore.isStaff) {
-      router.push('/doctor-dashboard')
-    } else {
-      router.push('/dashboard')
-    }
+    if (authStore.isDoctor) router.push('/doctor-dashboard')
+    else if (authStore.isStaff) router.push('/staff-dashboard')
+    else router.push('/dashboard')
   }
 
   function signIn(email, password) {

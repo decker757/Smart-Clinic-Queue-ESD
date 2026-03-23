@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAuth } from '@/composables/useAuth'
 import { useDoctor } from '@/composables/useDoctor'
+import { formatGender, formatDOB } from '@/utils/formatters'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 
@@ -12,7 +13,7 @@ const {
   fetchDoctorInfo,
   fetchDoctorSlots,
   callNextPatient,
-  completeAppointment,
+  completeConsultation,
   fetchPatient,
   fetchPatientHistory,
 } = useDoctor()
@@ -32,6 +33,20 @@ const currentPatient = ref(null)
 const patientProfile = ref(null)
 const patientHistory = ref([])
 const showPatientModal = ref(false)
+
+// ─── Consultation form ────────────────────────────────────────────────────────
+const showConsultationModal = ref(false)
+const consultationDone = ref(false)
+const paymentLink = ref(null)
+const consultForm = ref({
+  diagnosis: '',
+  consultationNotes: '',
+  prescribedMedication: '',
+  issueMc: false,
+  mcDays: '',
+  mcStartDate: '',
+  mcReason: '',
+})
 
 let pollTimer = null
 const POLL_MS = 30_000
@@ -54,17 +69,25 @@ const todaySlots = computed(() => {
   })
 })
 
+const SLOT_STATUS_BADGE = {
+  available: { label: 'Available', classes: 'bg-emerald-100 text-emerald-700' },
+  booked:    { label: 'Booked',    classes: 'bg-amber-100 text-amber-700' },
+  completed: { label: 'Completed', classes: 'bg-slate-100 text-slate-500' },
+  cancelled: { label: 'Cancelled', classes: 'bg-red-100 text-red-600' },
+}
+
 function slotStatusBadge(status) {
-  const map = {
-    available: { label: 'Available', classes: 'bg-emerald-100 text-emerald-700' },
-    booked:    { label: 'Booked',    classes: 'bg-amber-100 text-amber-700' },
-    completed: { label: 'Completed', classes: 'bg-slate-100 text-slate-500' },
-    cancelled: { label: 'Cancelled', classes: 'bg-red-100 text-red-600' },
-  }
-  return map[status] ?? { label: status, classes: 'bg-slate-100 text-slate-500' }
+  return SLOT_STATUS_BADGE[status] ?? { label: status, classes: 'bg-slate-100 text-slate-500' }
 }
 
 // ─── Data loading ─────────────────────────────────────────────────────────────
+async function loadSlots() {
+  const doctorId = authStore.user?.id
+  if (!doctorId) return
+  const slotsData = await fetchDoctorSlots(doctorId)
+  slots.value = slotsData ?? []
+}
+
 async function loadDashboard() {
   try {
     const doctorId = authStore.user?.id
@@ -91,17 +114,24 @@ async function handleCallNext() {
   actionSuccess.value = ''
   callLoading.value = true
   try {
-    const session = new Date().getHours() < 13 ? 'morning' : 'afternoon'
+    const session = new Date().getHours() < 12 ? 'morning' : 'afternoon'
     const result = await callNextPatient(session, authStore.user?.id)
     currentPatient.value = result
     actionSuccess.value = `Patient #${result.queue_number} called!`
     setTimeout(() => { actionSuccess.value = '' }, 3000)
-    await loadDashboard()
   } catch (e) {
-    actionError.value = e.message ?? 'No patients in queue'
+    actionError.value = e.message ?? 'No checked-in patients in queue'
   } finally {
     callLoading.value = false
   }
+}
+
+function openConsultationModal() {
+  consultForm.value = { diagnosis: '', consultationNotes: '', prescribedMedication: '', issueMc: false, mcDays: '', mcStartDate: '', mcReason: '' }
+  paymentLink.value = null
+  consultationDone.value = false
+  actionError.value = ''
+  showConsultationModal.value = true
 }
 
 async function handleComplete() {
@@ -110,14 +140,26 @@ async function handleComplete() {
   actionSuccess.value = ''
   completeLoading.value = true
   try {
-    await completeAppointment(currentPatient.value.appointment_id)
-    actionSuccess.value = 'Appointment completed!'
+    const f = consultForm.value
+    const result = await completeConsultation({
+      appointmentId: currentPatient.value.appointment_id,
+      patientId: currentPatient.value.patient_id,
+      doctorId: authStore.user?.id,
+      diagnosis: f.diagnosis,
+      consultationNotes: f.consultationNotes,
+      prescribedMedication: f.prescribedMedication,
+      mcDays: f.issueMc && f.mcDays ? parseInt(f.mcDays, 10) : null,
+      mcStartDate: f.issueMc ? f.mcStartDate : null,
+      mcReason: f.issueMc ? f.mcReason : null,
+    })
+    paymentLink.value = result.payment_link ?? null
+    consultationDone.value = true
+    actionSuccess.value = 'Consultation completed!'
     currentPatient.value = null
     patientProfile.value = null
-    setTimeout(() => { actionSuccess.value = '' }, 3000)
-    await loadDashboard()
+    setTimeout(() => { actionSuccess.value = '' }, 4000)
   } catch (e) {
-    actionError.value = e.message ?? 'Failed to complete appointment'
+    actionError.value = e.message ?? 'Failed to complete consultation'
   } finally {
     completeLoading.value = false
   }
@@ -146,7 +188,7 @@ async function handleViewPatient() {
 
 onMounted(() => {
   loadDashboard()
-  pollTimer = setInterval(loadDashboard, POLL_MS)
+  pollTimer = setInterval(loadSlots, POLL_MS)
 })
 
 onUnmounted(() => {
@@ -264,10 +306,10 @@ onUnmounted(() => {
             <AppButton variant="secondary" @click="handleViewPatient">
               View Patient Profile &amp; History
             </AppButton>
-            <AppButton :loading="completeLoading" @click="handleComplete">
-              Complete Appointment
+            <AppButton @click="openConsultationModal">
+              Complete Consultation
             </AppButton>
-            <AppButton variant="secondary" :loading="callLoading" @click="handleCallNext">
+            <AppButton variant="secondary" :loading="callLoading" :disabled="!!currentPatient" @click="handleCallNext">
               Call Next Patient
             </AppButton>
           </div>
@@ -372,7 +414,7 @@ onUnmounted(() => {
               <div>
                 <p class="font-heading font-semibold text-text">{{ patientProfile.nric }}</p>
                 <p class="text-sm text-slate-500">
-                  {{ patientProfile.gender ?? '—' }} · DOB: {{ patientProfile.dob ?? '—' }}
+                  {{ formatGender(patientProfile.gender) }} · DOB: {{ formatDOB(patientProfile.dob) }}
                 </p>
               </div>
             </div>
@@ -423,6 +465,152 @@ onUnmounted(() => {
           </div>
 
         </div>
+      </div>
+    </div>
+
+    <!-- ─── Consultation Form Modal ───────────────────────────────────── -->
+    <div
+      v-if="showConsultationModal"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40"
+      @click.self="showConsultationModal = false"
+    >
+      <div class="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
+
+        <!-- Modal header -->
+        <div class="sticky top-0 bg-white border-b border-slate-100 px-5 py-4 flex items-center justify-between">
+          <h3 class="font-heading font-semibold text-text">Complete Consultation</h3>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-text transition-colors cursor-pointer"
+            aria-label="Close"
+            @click="showConsultationModal = false"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Success / payment link state -->
+        <div v-if="consultationDone" class="p-5 space-y-4">
+          <div class="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+            <svg class="w-6 h-6 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <p class="text-sm font-semibold text-emerald-700">Consultation completed successfully.</p>
+          </div>
+          <div v-if="paymentLink" class="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Payment Link</p>
+            <a
+              :href="paymentLink"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-sm text-primary underline break-all"
+            >{{ paymentLink }}</a>
+          </div>
+          <AppButton variant="secondary" @click="showConsultationModal = false">Close</AppButton>
+        </div>
+
+        <!-- Form -->
+        <form v-else class="p-5 space-y-5" @submit.prevent="handleComplete">
+
+          <AppAlert v-if="actionError" :message="actionError" />
+
+          <!-- Diagnosis -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5" for="diagnosis">
+              Diagnosis
+            </label>
+            <input
+              id="diagnosis"
+              v-model="consultForm.diagnosis"
+              type="text"
+              placeholder="e.g. Acute upper respiratory infection"
+              class="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+          </div>
+
+          <!-- Consultation notes -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5" for="notes">
+              Consultation Notes
+            </label>
+            <textarea
+              id="notes"
+              v-model="consultForm.consultationNotes"
+              rows="3"
+              placeholder="Clinical observations, treatment plan…"
+              class="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+          </div>
+
+          <!-- Prescription -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5" for="medication">
+              Prescribed Medication
+            </label>
+            <textarea
+              id="medication"
+              v-model="consultForm.prescribedMedication"
+              rows="2"
+              placeholder="e.g. Paracetamol 500mg — 3x daily for 3 days"
+              class="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+          </div>
+
+          <!-- MC toggle -->
+          <div class="border border-slate-200 rounded-xl p-4 space-y-4">
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                v-model="consultForm.issueMc"
+                type="checkbox"
+                class="w-4 h-4 rounded accent-primary"
+              />
+              <span class="text-sm font-semibold text-text">Issue Medical Certificate (MC)</span>
+            </label>
+
+            <div v-if="consultForm.issueMc" class="space-y-3 pt-1">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-500 mb-1" for="mc-days">Days</label>
+                  <input
+                    id="mc-days"
+                    v-model="consultForm.mcDays"
+                    type="number"
+                    min="1"
+                    max="30"
+                    placeholder="2"
+                    class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-500 mb-1" for="mc-start">Start Date</label>
+                  <input
+                    id="mc-start"
+                    v-model="consultForm.mcStartDate"
+                    type="date"
+                    class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-500 mb-1" for="mc-reason">Reason</label>
+                <input
+                  id="mc-reason"
+                  v-model="consultForm.mcReason"
+                  type="text"
+                  placeholder="e.g. Fever and fatigue"
+                  class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+              </div>
+            </div>
+          </div>
+
+          <AppButton type="submit" :loading="completeLoading">
+            Submit &amp; Complete
+          </AppButton>
+        </form>
+
       </div>
     </div>
 

@@ -120,5 +120,5 @@ async def call_next(body: CallNextRequest):
         return _msg(result)
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
-            raise HTTPException(status_code=404, detail="No patients in queue")
-        raise HTTPException(status_code=500, detail="Internal server error")
+            raise HTTPException(status_code=404, detail=e.details() or "No checked-in patients in queue")
+        raise HTTPException(status_code=500, detail=e.details() or "Internal server error")
