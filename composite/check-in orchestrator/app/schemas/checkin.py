@@ -8,10 +8,10 @@ class Location(BaseModel):
 
 class CheckInRequest(BaseModel):
     patient_id: str
+    appointment_id: str
     appointment_time: datetime
-    patient_location: Location   # now a dict-like object
+    patient_location: Location
     clinic_location: Location
-
 
 
 class CheckInResponse(BaseModel):
@@ -21,4 +21,5 @@ class CheckInResponse(BaseModel):
 
 class ConfirmRequest(BaseModel):
     patient_id: str
+    appointment_id: str
     is_coming: bool

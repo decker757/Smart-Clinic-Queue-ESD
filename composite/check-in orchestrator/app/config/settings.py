@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     ETA_SERVICE_HOST: str = "eta-service"
     ETA_SERVICE_PORT: int = 50051
     AUTH_SERVICE_URL: str = "http://auth-service:3000"
+    LATE_TTL_MS: int = 5 * 60 * 1000  # override for testing: set to e.g. 10000
 
     class Config:
         env_file = ".env"

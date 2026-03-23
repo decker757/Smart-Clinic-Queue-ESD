@@ -7,8 +7,8 @@ router = APIRouter()
 
 @router.post("/check-in", response_model=CheckInResponse)
 async def check_in(body: CheckInRequest, auth_ctx: AuthContext = Depends(require_auth)):
-    return await process_check_in(body, auth_ctx)
+    return await process_check_in(body)
 
 @router.post("/check-in/confirm")
-async def confirm_check_in(body: ConfirmRequest):
+async def confirm_check_in(body: ConfirmRequest, auth_ctx: AuthContext = Depends(require_auth)):
     return await handle_confirmation(body)
