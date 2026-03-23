@@ -20,10 +20,11 @@
 
 set -e
 
-BASE_AUTH="http://localhost:3000"
-BASE_COMPOSITE="http://localhost:8080"
-BASE_CHECKIN="http://localhost:8085"
-BASE_QUEUE="http://localhost:3002"
+KONG="http://localhost:8000"
+BASE_AUTH="$KONG/api/auth"
+BASE_COMPOSITE="$KONG"
+BASE_CHECKIN="$KONG/api"
+BASE_QUEUE="$KONG"
 EMAIL="checkin-$(date +%s)@test.com"
 PASSWORD="password123"
 
@@ -34,13 +35,13 @@ PATIENT_LAT_LATE="1.0000"     # ~33 km from clinic → late
 
 echo ""
 echo "=== 1. Sign up ==="
-curl -sf -X POST "$BASE_AUTH/api/auth/sign-up/email" \
+curl -sf -X POST "$BASE_AUTH/sign-up/email" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"Test Patient\"}" | jq .
 
 echo ""
 echo "=== 2. Sign in ==="
-SIGNIN=$(curl -sf -X POST "$BASE_AUTH/api/auth/sign-in/email" \
+SIGNIN=$(curl -sf -X POST "$BASE_AUTH/sign-in/email" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
 echo "$SIGNIN" | jq .
@@ -49,7 +50,7 @@ USER_ID=$(echo "$SIGNIN" | jq -r '.user.id')
 
 echo ""
 echo "=== 3. Get JWT ==="
-JWT=$(curl -sf "$BASE_AUTH/api/auth/token" \
+JWT=$(curl -sf "$BASE_AUTH/token" \
   -H "Authorization: Bearer $SESSION_TOKEN" | jq -r '.token')
 echo "JWT acquired."
 

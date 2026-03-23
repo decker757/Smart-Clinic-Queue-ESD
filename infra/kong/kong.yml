@@ -207,12 +207,7 @@ services:
     routes:
       - name: check-in-route
         paths:
-          - /check-in
-        strip_path: false
-
-      - name: check-in-confirm-route
-        paths:
-          - /check-in/confirm
+          - /api/check-in
         strip_path: false
 
   - name: queue-coordinator-service

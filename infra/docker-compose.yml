@@ -203,12 +203,13 @@ services:
     restart: unless-stopped
 
   checkin-orchestrator:
-    build: ./checkin-orchestrator
+    build:
+      context: ../composite/check-in orchestrator
     container_name: checkin-orchestrator
     ports:
       - "8085:8000"  # HOST_PORT:CONTAINER_PORT
-    environment:
-      - CHECKIN_ORCHESTRATOR_URL=http://checkin-orchestrator:8000
+    env_file:
+      - ./env/checkin-orchestrator.env
 
   composite-patient-orchestrator:
     build:

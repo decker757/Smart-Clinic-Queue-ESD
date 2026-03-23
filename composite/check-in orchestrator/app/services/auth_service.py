@@ -1,7 +1,7 @@
 import logging
 import jwt
 from jwt import PyJWKClient
-from app.config import settings
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 

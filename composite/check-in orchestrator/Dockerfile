@@ -11,7 +11,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the full app code
-COPY . .
+COPY app ./app
+
+# Compile protobuf definitions and fix the generated relative import
+RUN python -m grpc_tools.protoc \
+    -I./app/proto \
+    --python_out=./app/proto \
+    --grpc_python_out=./app/proto \
+    ./app/proto/eta.proto && \
+    sed -i 's/^import eta_pb2/from app.proto import eta_pb2/' ./app/proto/eta_pb2_grpc.py
 
 # Expose FastAPI port
 EXPOSE 8000
