@@ -214,7 +214,7 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
             SET status = 'called', updated_at = NOW()
             WHERE id = (
                 SELECT id FROM queue.queue_entries
-                WHERE status IN ('waiting', 'checked_in')
+                WHERE status = 'checked_in'
                   AND (
                       -- specific-doctor booking: match by doctor_id, session is null
                       ($2::text IS NOT NULL AND doctor_id = $2 AND session IS NULL)
@@ -222,16 +222,13 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
                       -- session-based booking: match by session, no doctor assigned
                       ($2::text IS NULL AND session = $1)
                   )
-                ORDER BY
-                    -- checked_in patients go first (confirmed present), then waiting
-                    CASE status WHEN 'checked_in' THEN 0 ELSE 1 END ASC,
-                    queue_number ASC
+                ORDER BY queue_number ASC
                 LIMIT 1
             )
             RETURNING *
         `, [session, doctor_id ?? null]);
 
-        if (!rows[0]) throw new Error("No waiting patients in queue");
+        if (!rows[0]) throw new Error("No checked-in patients in queue");
 
         await redis.del(cacheKey(rows[0].appointment_id));
         return rows[0] as QueueEntry;

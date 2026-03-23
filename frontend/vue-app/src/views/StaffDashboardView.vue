@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAuth } from '@/composables/useAuth'
 import { useStaff } from '@/composables/useStaff'
 import { wsBase } from '@/composables/useAppointment'
+import { formatGender, formatDOB } from '@/utils/formatters'
 import AppAlert from '@/components/ui/AppAlert.vue'
 
 const TERMINAL = new Set(['done', 'cancelled'])
@@ -456,7 +457,7 @@ onUnmounted(() => {
               <div>
                 <p class="font-heading font-semibold text-text">{{ selectedPatient.nric }}</p>
                 <p class="text-sm text-slate-500">
-                  {{ { M: 'Male', F: 'Female' }[selectedPatient.gender] ?? selectedPatient.gender ?? '—' }} · DOB: {{ selectedPatient.dob ? new Date(selectedPatient.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—' }}
+                  {{ formatGender(selectedPatient.gender) }} · DOB: {{ formatDOB(selectedPatient.dob) }}
                 </p>
                 <p class="text-sm text-slate-500">{{ selectedPatient.phone ?? '—' }}</p>
               </div>

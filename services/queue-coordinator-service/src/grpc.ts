@@ -2,6 +2,7 @@ import path from "path";
 import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 import * as QueueService from "./service/Queue";
+import { broadcastQueueUpdate } from "./ws/manager";
 
 const PROTO_PATH = path.join(__dirname, "proto/queue.proto");
 
@@ -30,6 +31,7 @@ async function CheckIn(call: any, callback: any){
     try{
         const { appointment_id, caller_id } = call.request;
         const entry = await QueueService.checkIn(appointment_id, caller_id || undefined);
+        broadcastQueueUpdate(appointment_id, entry);
         callback(null, entry);
     } catch (e: any){
         if (e.message === "Forbidden")
@@ -52,6 +54,7 @@ async function AddToQueue(call: any, callback: any){
 async function RemoveFromQueue(call: any, callback: any){
     try{
         const entry = await QueueService.removeFromQueue(call.request.appointment_id);
+        broadcastQueueUpdate(call.request.appointment_id, entry);
         callback(null, entry);
     } catch (e: any){
         if (e.message === "Appointment not in queue")
@@ -63,6 +66,7 @@ async function RemoveFromQueue(call: any, callback: any){
 async function MarkNoShow(call: any, callback: any){
     try{
         const entry = await QueueService.markNoShow(call.request.appointment_id);
+        broadcastQueueUpdate(call.request.appointment_id, entry);
         callback(null, entry);
     } catch(e : any){
         callback({ code: grpc.status.INTERNAL, message: e.message });
@@ -72,6 +76,7 @@ async function MarkNoShow(call: any, callback: any){
 async function CompleteAppointment(call: any, callback: any) {
     try {
         const entry = await QueueService.completeAppointment(call.request.appointment_id);
+        broadcastQueueUpdate(call.request.appointment_id, entry);
         callback(null, entry);
     } catch (e: any) {
         callback({ code: grpc.status.INTERNAL, message: e.message });
@@ -82,9 +87,10 @@ async function CallNext(call: any, callback: any) {
     try {
         const { session, doctor_id } = call.request;
         const entry = await QueueService.callNext(session, doctor_id || undefined);
+        broadcastQueueUpdate(entry.appointment_id, entry);
         callback(null, entry);
     } catch (e: any) {
-        if (e.message === "No waiting patients in queue")
+        if (e.message === "No checked-in patients in queue")
             return callback({ code: grpc.status.NOT_FOUND, message: e.message });
         callback({ code: grpc.status.INTERNAL, message: e.message });
     }
