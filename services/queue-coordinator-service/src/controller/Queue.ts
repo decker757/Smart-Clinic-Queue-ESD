@@ -5,6 +5,16 @@ import { callerIdFromAuthHeader } from "../utils/jwt";
 
 const router = Router();
 
+// GET /queue/active — staff lists all active queue entries
+router.get("/active", async (_req: Request, res: Response) => {
+    try {
+        const entries = await QueueService.listActiveQueue();
+        res.json(entries);
+    } catch {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // GET /queue/position/:appointment_id — patient checks their queue position
 router.get("/position/:appointment_id", async (req: Request, res: Response) => {
     try {

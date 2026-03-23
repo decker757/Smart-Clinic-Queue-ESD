@@ -241,6 +241,15 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
     }
 }
 
+export async function listActiveQueue(): Promise<QueueEntry[]> {
+    const { rows } = await pool.query(`
+        SELECT * FROM queue.queue_entries
+        WHERE status NOT IN ('done', 'cancelled')
+        ORDER BY queue_number ASC
+    `);
+    return rows as QueueEntry[];
+}
+
 export async function resetDailyQueue(){
     try{
         await pool.query(`DELETE FROM queue.queue_entries`);

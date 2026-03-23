@@ -11,6 +11,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
 
   const isAuthenticated = computed(() => !!jwt.value)
+  const isStaff = computed(() => ['staff', 'doctor', 'admin'].includes(user.value?.role))
 
   function setAuth(token, userData) {
     jwt.value = token
@@ -22,5 +23,5 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
   }
 
-  return { jwt, user, isAuthenticated, setAuth, clearAuth }
+  return { jwt, user, isAuthenticated, isStaff, setAuth, clearAuth }
 })

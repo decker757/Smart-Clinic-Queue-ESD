@@ -52,7 +52,7 @@ function formatAppointmentDate(appt) {
 // e.g. https://kong.railway.app → wss://kong.railway.app
 //      http://localhost:8000    → ws://localhost:8000
 //      '' (same origin)         → ws://<current host>
-function wsBase() {
+export function wsBase() {
   if (!API_BASE) {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     return `${proto}://${location.host}`
