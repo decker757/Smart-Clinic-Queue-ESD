@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package patient;
+
+service PatientService {
+  rpc GetPatient  (GetPatientRequest) returns (PatientResponse);
+  rpc GetHistory  (GetHistoryRequest) returns (HistoryListResponse);
+}
+
+message GetPatientRequest {
+  string id = 1;
+}
+
+message PatientResponse {
+  string id                 = 1;
+  string phone              = 2;
+  string dob                = 3;
+  string nric               = 4;
+  repeated string allergies = 5;
+  string gender             = 6;
+  string created_at         = 7;
+  string updated_at         = 8;
+}
+
+message GetHistoryRequest {
+  string patient_id = 1;
+}
+
+message HistoryResponse {
+  string id            = 1;
+  string patient_id    = 2;
+  string diagnosis     = 3;
+  string diagnosed_at  = 4;
+  string notes         = 5;
+  string created_at    = 6;
+}
+
+message HistoryListResponse {
+  repeated HistoryResponse entries = 1;
+}
