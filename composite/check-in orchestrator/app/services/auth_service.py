@@ -1,6 +1,9 @@
+import logging
 import jwt
 from jwt import PyJWKClient
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _jwks_client: PyJWKClient | None = None
 
@@ -30,5 +33,6 @@ async def verify_token(token: str) -> dict | None:
         return payload
     except jwt.PyJWTError:
         return None
-    except Exception:
+    except Exception as e:
+        logger.warning("Unexpected error during token verification: %s", e)
         return None
