@@ -1,19 +1,25 @@
 import grpc
 from fastapi import HTTPException
+from google.protobuf.json_format import MessageToDict
 from src.models.doctor import UpdateSlotStatusRequest, AddConsultationNotesRequest
 from src.services import doctor as doctor_service, rabbitmq
 
 
+def _msg(proto):
+    return MessageToDict(proto, preserving_proto_field_name=True)
+
+
 async def list_doctors():
     try:
-        return await doctor_service.list_doctors()
+        doctors = await doctor_service.list_doctors()
+        return [_msg(d) for d in doctors]
     except grpc.RpcError as e:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 async def get_doctor(doctor_id: str):
     try:
-        return await doctor_service.get_doctor(doctor_id)
+        return _msg(await doctor_service.get_doctor(doctor_id))
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Doctor not found")
@@ -22,7 +28,8 @@ async def get_doctor(doctor_id: str):
 
 async def get_doctor_slots(doctor_id: str):
     try:
-        return await doctor_service.get_doctor_slots(doctor_id)
+        slots = await doctor_service.get_doctor_slots(doctor_id)
+        return [_msg(s) for s in slots]
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Doctor not found")
@@ -36,7 +43,7 @@ async def update_slot_status(slot_id: str, body: UpdateSlotStatusRequest):
             "slot_id": slot_id,
             "status": body.status,
         })
-        return slot
+        return _msg(slot)
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Slot not found")
@@ -57,7 +64,7 @@ async def add_consultation_notes(appointment_id: str, staff_id: str, body: AddCo
             "doctor_id": staff_id,
             "patient_id": body.patient_id,
         })
-        return result
+        return _msg(result)
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Appointment not found")

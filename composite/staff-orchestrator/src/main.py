@@ -1,8 +1,18 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.routes import doctor, queue, patient
+from src.services import rabbitmq
 
-app = FastAPI(title="Staff Management Orchestrator", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await rabbitmq.connect()
+    yield
+    await rabbitmq.disconnect()
+
+
+app = FastAPI(title="Staff Management Orchestrator", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

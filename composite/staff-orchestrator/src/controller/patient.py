@@ -1,6 +1,11 @@
 import grpc
 from fastapi import HTTPException
+from google.protobuf.json_format import MessageToDict
 from src.services import patient as patient_service, rabbitmq
+
+
+def _msg(proto):
+    return MessageToDict(proto, preserving_proto_field_name=True)
 
 
 async def get_patient(patient_id: str, staff_id: str):
@@ -10,7 +15,7 @@ async def get_patient(patient_id: str, staff_id: str):
             "patient_id": patient_id,
             "viewed_by": staff_id,
         })
-        return patient
+        return _msg(patient)
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Patient not found")
@@ -19,7 +24,8 @@ async def get_patient(patient_id: str, staff_id: str):
 
 async def get_patient_history(patient_id: str):
     try:
-        return await patient_service.get_history(patient_id)
+        entries = await patient_service.get_history(patient_id)
+        return [_msg(e) for e in entries]
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Patient not found")

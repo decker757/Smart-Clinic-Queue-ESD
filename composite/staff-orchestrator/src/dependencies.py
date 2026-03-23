@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 from src.services import auth
 
 
@@ -22,8 +22,7 @@ async def require_auth(authorization: str = Header(...)) -> AuthContext:
     )
 
 
-async def require_staff(authorization: str = Header(...)) -> AuthContext:
-    ctx = await require_auth(authorization)
+async def require_staff(ctx: AuthContext = Depends(require_auth)) -> AuthContext:
     if ctx.role not in ("staff", "doctor", "admin"):
         raise HTTPException(status_code=403, detail="Staff access required")
     return ctx

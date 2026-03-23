@@ -41,6 +41,32 @@ services:
           - /api/composite/appointments
         strip_path: false
 
+  - name: composite-staff-orchestrator
+    url: $COMPOSITE_STAFF_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: composite-staff-route
+        paths:
+          - /api/composite/staff
+        strip_path: false
+
   - name: composite-consultation
     url: $COMPOSITE_CONSULTATION_URL
     plugins:

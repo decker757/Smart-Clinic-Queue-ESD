@@ -23,6 +23,14 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true,
     },
+    user: {
+        additionalFields: {
+            role: {
+                type: "string",
+                defaultValue: "patient",
+            },
+        },
+    },
     plugins: [
         bearer(),
         jwt({
@@ -36,6 +44,9 @@ export const auth = betterAuth({
                 issuer: "smart-clinic",
                 audience: "smart-clinic-services",
                 expirationTime: "1h",
+                definePayload: async ({ user }) => ({
+                    role: (user as any).role ?? "patient",
+                }),
             },
         }),
     ],

@@ -14,6 +14,7 @@ services:
       COMPOSITE_APPOINTMENT_URL: http://composite-appointment:8000
       COMPOSITE_PATIENT_URL: http://composite-patient-orchestrator:8001
       COMPOSITE_CONSULTATION_URL: http://composite-consultation:8002
+      COMPOSITE_STAFF_URL: http://composite-staff-orchestrator:8004
       DOCTOR_SERVICE_URL: http://doctor-service:3006
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
     ports:
@@ -212,6 +213,25 @@ services:
       rabbitmq:
         condition: service_healthy
       patient-service:
+        condition: service_started
+    restart: unless-stopped
+
+  composite-staff-orchestrator:
+    build:
+      context: ..
+      dockerfile: composite/staff-orchestrator/Dockerfile
+    ports:
+      - "8084:8004"
+    env_file:
+      - ./env/composite-staff-orchestrator.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      doctor-service:
+        condition: service_started
+      patient-service:
+        condition: service_started
+      queue-coordinator-service:
         condition: service_started
     restart: unless-stopped
 

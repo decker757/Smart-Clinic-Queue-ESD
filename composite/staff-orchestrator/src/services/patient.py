@@ -7,16 +7,9 @@ stub = patient_pb2_grpc.PatientServiceStub(channel)
 
 
 async def get_patient(patient_id: str):
-    try:
-        response = await stub.GetPatient(patient_pb2.GetPatientRequest(id=patient_id))
-        return response
-    except grpc.RpcError as e:
-        raise e
+    return await stub.GetPatient(patient_pb2.GetPatientRequest(id=patient_id))
 
 
 async def get_history(patient_id: str):
-    try:
-        response = await stub.GetHistory(patient_pb2.GetHistoryRequest(patient_id=patient_id))
-        return response.entries
-    except grpc.RpcError as e:
-        raise e
+    response = await stub.GetHistory(patient_pb2.GetHistoryRequest(patient_id=patient_id))
+    return response.entries
