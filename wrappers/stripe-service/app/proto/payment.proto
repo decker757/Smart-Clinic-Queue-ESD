@@ -2,22 +2,16 @@ syntax = "proto3";
 
 package payment;
 
-// gRPC service definition
 service PaymentService {
-  rpc CreatePayment (CreatePaymentRequest) returns (CreatePaymentResponse);
+  rpc CreatePaymentRequest (PaymentRequest) returns (PaymentResponse);
 }
 
-// Request from orchestrator
-message CreatePaymentRequest {
-  string patient_id = 1;
-  int32 amount = 2;              // in cents (e.g. 5000 = $50.00)
-  string currency = 3;           // "usd", "sgd"
-  string consultation_id = 4;
+message PaymentRequest {
+  string appointment_id = 1;
+  string patient_id     = 2;
 }
 
-// Response back to orchestrator
-message CreatePaymentResponse {
-  string payment_url = 1;        // Stripe Checkout लिंक
-  string payment_intent_id = 2;
-  string status = 3;             // "pending"
+message PaymentResponse {
+  string payment_id   = 1;
+  string payment_link = 2;
 }

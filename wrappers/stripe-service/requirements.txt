@@ -1,7 +1,11 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings
 aio-pika
 stripe
 python-dotenv
-grpc
+grpcio
+grpcio-tools
+grpcio-reflection
+PyJWT[crypto]

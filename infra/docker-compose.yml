@@ -18,6 +18,7 @@ services:
       DOCTOR_SERVICE_URL: http://doctor-service:3006
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
       CHECKIN_ORCHESTRATOR_URL: http://checkin-orchestrator:8000
+      PAYMENT_SERVICE_URL: http://payment-service:3008
     ports:
       - "8000:8000"   # proxy
       - "8444:8001"   # admin API
@@ -266,12 +267,35 @@ services:
         condition: service_started
       payment-service:
         condition: service_started
+      stripe-service:
+        condition: service_started
     restart: unless-stopped
 
   payment-service:
     build:
       context: ..
-      dockerfile: services/payment-service-stub/Dockerfile
+      dockerfile: services/payment-service/Dockerfile
+    ports:
+      - "3008:3008"
+    env_file:
+      - ./env/payment.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  stripe-service:
+    build:
+      context: ../wrappers/stripe-service
+    container_name: stripe-service
+    ports:
+      - "8086:8001"   # HTTP (Stripe webhook)
+      - "50060:50051" # gRPC (internal calls from composite/consultation)
+    env_file:
+      - ./env/stripe-service.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
 
   # ─── Frontend ───────────────────────────────────────────────

@@ -1,7 +1,35 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api import payments
+from app.grpc.server import serve as grpc_serve
 
-app = FastAPI(title="Stripe Payment Service")
+logger = logging.getLogger(__name__)
 
-# Include the payments router
-app.include_router(payments.router, prefix="/payments")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start gRPC server as a background task sharing the event loop with uvicorn
+    grpc_task = asyncio.create_task(grpc_serve())
+    logger.info("gRPC payment server starting")
+    yield
+    grpc_task.cancel()
+    try:
+        await grpc_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("gRPC payment server stopped")
+
+
+app = FastAPI(title="Stripe Payment Service", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(payments.router, prefix="/api/payments")

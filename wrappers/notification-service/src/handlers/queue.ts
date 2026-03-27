@@ -1,5 +1,6 @@
 import { sendSms } from "../notify/sms";
 import { getPatientPhone } from "../notify/patient";
+import { dedup } from "../util/dedup";
 
 export async function handleCheckedIn(payload: any) {
     if (!payload?.patient_id) { console.warn("[queue.checked_in] missing patient_id, skipping"); return; }
@@ -38,6 +39,9 @@ export async function handleDeprioritized(payload: any) {
 
 export async function handleRemoved(payload: any) {
     if (!payload?.patient_id) { console.warn("[queue.removed] missing patient_id, skipping"); return; }
+    // Deduplicate: queue.removed can fire twice for the same appointment when the
+    // patient explicitly says "No" AND the 5-min TTL dead-letter also fires.
+    if (!dedup(payload.appointment_id, "queue.removed")) return;
     const phone = await getPatientPhone(payload.patient_id);
     if (!phone) { console.warn(`No phone for patient ${payload.patient_id}`); return; }
     await sendSms(phone, `You have been removed from the queue. Please rebook if you still need to see a doctor.`);

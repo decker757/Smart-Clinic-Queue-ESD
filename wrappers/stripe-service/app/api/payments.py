@@ -1,42 +1,67 @@
-from fastapi import APIRouter, Request, Header, HTTPException
+import json
+import logging
+from datetime import datetime, timezone
+from fastapi import APIRouter, Header, HTTPException, Request
 import stripe
-import os
-from dotenv import load_dotenv
+from app.config.settings import settings
+from app.messaging.publisher import publish_event
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
-stripe.api_key = os.getenv("STRIPE_API_KEY")
-WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SIGNING_SECRET")
+stripe.api_key = settings.STRIPE_API_KEY
 
 router = APIRouter()
 
+
 @router.post("/webhook")
-async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
-    if stripe_signature is None:
+async def stripe_webhook(request: Request, stripe_signature: str = Header(None, alias="stripe-signature")):
+    if not stripe_signature:
         raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
-    
+
     payload = await request.body()
 
     try:
-        event = stripe.Webhook.construct_event(
+        stripe.Webhook.construct_event(
             payload=payload,
             sig_header=stripe_signature,
-            secret=WEBHOOK_SECRET,
+            secret=settings.STRIPE_WEBHOOK_SIGNING_SECRET,
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
-    # Handle the event type
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-        # TODO: update your DB / notify orchestrator
-        print(f"✅ Payment completed for consultation {session['metadata']['consultation_id']}")
-    elif event["type"] == "payment_intent.payment_failed":
-        session = event["data"]["object"]
-        print(f"❌ Payment failed for consultation {session['metadata']['consultation_id']}")
-    else:
-        print(f"⚠ Unhandled event type {event['type']}")
+    # Use the raw payload as a plain dict — the Stripe SDK's StripeObject
+    # doesn't support .get() so we parse JSON ourselves after signature is verified.
+    event_dict = json.loads(payload)
+    await _handle_event(event_dict)
+    return {"status": "ok"}
 
-    return {"status": "success"}
+
+async def _handle_event(event: dict) -> None:
+    event_type = event["type"]
+    obj = event["data"]["object"]
+    # PaymentIntent metadata may not be propagated from the session — use .get() defensively
+    metadata = obj.get("metadata", {})
+    now = datetime.now(timezone.utc).isoformat()
+
+    if event_type == "checkout.session.completed":
+        logger.info("Payment completed: consultation=%s patient=%s", metadata.get("consultation_id"), metadata.get("patient_id"))
+        await publish_event("payment.completed", {
+            "consultation_id": metadata.get("consultation_id"),
+            "patient_id": metadata.get("patient_id"),
+            "payment_intent_id": obj.get("payment_intent"),
+            "timestamp": now,
+        })
+
+    elif event_type == "payment_intent.payment_failed":
+        logger.warning("Payment failed: consultation=%s patient=%s", metadata.get("consultation_id"), metadata.get("patient_id"))
+        await publish_event("payment.failed", {
+            "consultation_id": metadata.get("consultation_id"),
+            "patient_id": metadata.get("patient_id"),
+            "payment_intent_id": obj.get("id"),
+            "timestamp": now,
+        })
+
+    else:
+        logger.debug("Unhandled Stripe event type: %s", event_type)

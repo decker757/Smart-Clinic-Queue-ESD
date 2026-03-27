@@ -210,6 +210,29 @@ services:
           - /api/check-in
         strip_path: false
 
+  - name: payment-service
+    url: $PAYMENT_SERVICE_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          preflight_continue: false
+      - name: jwt
+        config:
+          key_claim_name: iss
+    routes:
+      - name: payment-route
+        paths:
+          - /api/payments
+        strip_path: false
+
   - name: queue-coordinator-service
     url: $QUEUE_COORDINATOR_URL
     plugins:
