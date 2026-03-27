@@ -127,6 +127,8 @@ export function useAppointment() {
         : 'General Practice',
       date:        formatAppointmentDate(appt),
       time:        formatAppointmentTime(appt),
+      startTime:   appt.start_time ?? null,
+      session:     appt.session ?? null,
       // Location is a clinic-level config; placeholder until a clinic-info endpoint exists
       location:    'Sunshine Polyclinic · Block A Level 2',
       queueNumber: queueEntry?.queue_number ?? null,
@@ -218,5 +220,45 @@ export function useAppointment() {
     return res.json()
   }
 
-  return { fetchDashboardData, connectQueueWebSocket, checkIn }
+  /**
+   * Calls the check-in orchestrator with travel ETA logic.
+   * Returns { status: 'checked_in' | 'late', eta_minutes: number }
+   */
+  async function checkInOrchestrator({ appointmentId, patientId, appointmentTime, patientLocation }) {
+    const CLINIC_LOCATION = { lat: 1.3521, lng: 103.8198 }
+    const res = await fetch(`${API_BASE}/api/check-in`, {
+      method: 'POST',
+      headers: { ...authHeaders(authStore.jwt), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patient_id: patientId,
+        appointment_id: appointmentId,
+        appointment_time: appointmentTime,
+        patient_location: patientLocation,
+        clinic_location: CLINIC_LOCATION,
+      }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.detail ?? 'Check-in failed. Please try again.')
+    }
+    return res.json()
+  }
+
+  /**
+   * Confirms late check-in: patient indicates whether they are still coming.
+   */
+  async function confirmCheckIn({ patientId, appointmentId, isComing }) {
+    const res = await fetch(`${API_BASE}/api/check-in/confirm`, {
+      method: 'POST',
+      headers: { ...authHeaders(authStore.jwt), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patient_id: patientId, appointment_id: appointmentId, is_coming: isComing }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.detail ?? 'Failed to confirm. Please try again.')
+    }
+    return res.json()
+  }
+
+  return { fetchDashboardData, connectQueueWebSocket, checkIn, checkInOrchestrator, confirmCheckIn }
 }

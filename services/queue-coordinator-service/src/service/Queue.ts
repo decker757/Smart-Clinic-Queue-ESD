@@ -190,6 +190,29 @@ export async function markNoShow(appointment_id: string): Promise<QueueEntry> {
     }
 }
 
+// Patient confirmed they are still coming but will be late — move to back of queue.
+export async function deprioritize(appointment_id: string): Promise<QueueEntry> {
+    try {
+        const { rows } = await pool.query(`
+            UPDATE queue.queue_entries
+            SET status = 'waiting',
+                queue_number = CASE session
+                    WHEN 'afternoon' THEN NEXTVAL('queue.queue_number_afternoon_seq')
+                    ELSE NEXTVAL('queue.queue_number_morning_seq')
+                END,
+                updated_at = NOW()
+            WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
+            RETURNING *
+        `, [appointment_id]);
+        if (!rows[0]) throw new Error("Appointment not in queue");
+        await redis.del(cacheKey(appointment_id));
+        return rows[0] as QueueEntry;
+    } catch (e) {
+        console.error("Error deprioritizing appointment:", e);
+        throw e;
+    }
+}
+
 export async function completeAppointment(appointment_id: string): Promise<QueueEntry> {
     try {
         const { rows } = await pool.query(`

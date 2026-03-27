@@ -1,0 +1,67 @@
+{
+  "info": {
+    "name": "Check-In Orchestrator",
+    "_postman_id": "12345-abcde-67890-fghij",
+    "description": "Test check-in orchestrator endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Check-In",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer testtoken" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"patient_id\": \"123\",\n  \"appointment_time\": \"2026-03-22T14:00:00Z\",\n  \"patient_location\": \"home\",\n  \"clinic_location\": \"clinic\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8001/check-in",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8001",
+          "path": ["check-in"]
+        }
+      }
+    },
+    {
+      "name": "Confirm Check-In (YES)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"patient_id\": \"123\",\n  \"is_coming\": true\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8001/check-in/confirm",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8001",
+          "path": ["check-in", "confirm"]
+        }
+      }
+    },
+    {
+      "name": "Confirm Check-In (NO)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"patient_id\": \"123\",\n  \"is_coming\": false\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8001/check-in/confirm",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8001",
+          "path": ["check-in", "confirm"]
+        }
+      }
+    }
+  ]
+}

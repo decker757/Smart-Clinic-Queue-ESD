@@ -8,7 +8,7 @@ import { useAppointment, mapQueueEntry } from '@/composables/useAppointment'
 const router = useRouter()
 const authStore = useAuthStore()
 const { signOut } = useAuth()
-const { fetchDashboardData, connectQueueWebSocket, checkIn: apiCheckIn } = useAppointment()
+const { fetchDashboardData, connectQueueWebSocket, checkInOrchestrator, confirmCheckIn } = useAppointment()
 
 // ─── State ──────────────────────────────────────────────────────────────────
 const loading = ref(true)
@@ -80,8 +80,8 @@ const firstName = computed(() => authStore.user?.name?.split(' ')[0] ?? 'there')
 
 const checkInLabel = computed(() => {
   if (!appointment.value) return ''
-  const map = { waiting: 'Check In', checked_in: 'Checked In', called: 'Your Turn — Go In' }
-  return map[appointment.value.status] ?? 'Check In'
+  const map = { waiting: "I'm on My Way", checked_in: 'Checked In', called: 'Your Turn — Go In' }
+  return map[appointment.value.status] ?? "I'm on My Way"
 })
 
 const statusBadge = computed(() => {
@@ -94,17 +94,86 @@ const statusBadge = computed(() => {
   return map[appointment.value.status] ?? null
 })
 
-// ─── Handlers ────────────────────────────────────────────────────────────────
-async function handleCheckIn() {
-  if (!appointment.value || appointment.value.status === 'checked_in' || appointment.value.status === 'called') return
-  actionError.value = ''
+// ─── Check-in modal state ─────────────────────────────────────────────────────
+const showOnMyWayModal = ref(false)
+const showLateModal = ref(false)
+const modalLoading = ref(false)
+const modalError = ref('')
+
+function openCheckInModal() {
+  if (!appointment.value || appointment.value.status !== 'waiting') return
+  modalError.value = ''
+  showOnMyWayModal.value = true
+}
+
+function closeModals() {
+  showOnMyWayModal.value = false
+  showLateModal.value = false
+  modalLoading.value = false
+  modalError.value = ''
+}
+
+function getAppointmentTime(appt) {
+  if (appt.startTime) return appt.startTime
+  // Session-based booking — use start of session as approximate appointment time
+  const today = new Date()
+  today.setHours(appt.session === 'afternoon' ? 13 : 8, 0, 0, 0)
+  return today.toISOString()
+}
+
+async function getPatientLocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ lat: 1.3521, lng: 103.8198 }) // fallback: central Singapore
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve({ lat: 1.3521, lng: 103.8198 }), // fallback on denial/error
+      { timeout: 5000 },
+    )
+  })
+}
+
+async function handleOnMyWayConfirm() {
+  modalLoading.value = true
+  modalError.value = ''
   try {
-    const entry = await apiCheckIn(appointment.value.id)
-    appointment.value = mapQueueEntry(appointment.value, entry)
+    const patientLocation = await getPatientLocation()
+    const result = await checkInOrchestrator({
+      appointmentId: appointment.value.id,
+      patientId: authStore.user.id,
+      appointmentTime: getAppointmentTime(appointment.value),
+      patientLocation,
+    })
+    if (result.status === 'late') {
+      showOnMyWayModal.value = false
+      showLateModal.value = true
+    } else {
+      // checked_in — WS will push the queue update; just close
+      closeModals()
+    }
   } catch (e) {
-    actionError.value = e.message === 'Appointment not in queue'
-      ? 'Your place in the queue is being set up — please try again in a moment.'
-      : (e.message ?? 'Check-in failed. Please try again.')
+    modalError.value = e.message ?? 'Check-in failed. Please try again.'
+  } finally {
+    modalLoading.value = false
+  }
+}
+
+async function handleLateConfirm(isComing) {
+  modalLoading.value = true
+  modalError.value = ''
+  try {
+    await confirmCheckIn({ patientId: authStore.user.id, appointmentId: appointment.value.id, isComing })
+    closeModals()
+    if (!isComing) {
+      // Patient cancelled — remove appointment from view
+      appointment.value = null
+    }
+  } catch (e) {
+    modalError.value = e.message ?? 'Something went wrong. Please try again.'
+  } finally {
+    modalLoading.value = false
   }
 }
 </script>
@@ -306,7 +375,7 @@ async function handleCheckIn() {
                   appointment.status === 'called',
               }"
               :aria-disabled="appointment.status !== 'waiting' ? 'true' : undefined"
-              @click="handleCheckIn"
+              @click="openCheckInModal"
             >
               {{ checkInLabel }}
             </button>
@@ -386,4 +455,149 @@ async function handleCheckIn() {
 
     </main>
   </div>
+
+  <!-- ─── Modal: I'm on my way ──────────────────────────────────────────────── -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div
+        v-if="showOnMyWayModal"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onmyway-title"
+        @click.self="closeModals"
+      >
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/40" aria-hidden="true" />
+
+        <!-- Sheet -->
+        <div class="relative w-full max-w-sm bg-white rounded-2xl shadow-xl p-6 space-y-5">
+          <!-- Icon -->
+          <div class="w-12 h-12 rounded-2xl bg-cta/10 flex items-center justify-center">
+            <svg class="w-6 h-6 text-cta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+            </svg>
+          </div>
+
+          <div>
+            <h2 id="onmyway-title" class="font-heading font-semibold text-text text-lg">I'm on my way!</h2>
+            <p class="text-sm text-slate-500 mt-1 text-pretty">
+              We'll check your travel time to confirm your queue status.
+              Your location is only used for this check-in.
+            </p>
+          </div>
+
+          <!-- Error -->
+          <div v-if="modalError" role="alert" class="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            {{ modalError }}
+          </div>
+
+          <div class="flex flex-col gap-2.5">
+            <button
+              type="button"
+              class="w-full h-11 rounded-xl font-semibold text-sm bg-cta text-white hover:bg-cta/90 transition-colors duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              :disabled="modalLoading"
+              @click="handleOnMyWayConfirm"
+            >
+              <svg v-if="modalLoading" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+              </svg>
+              {{ modalLoading ? 'Checking in…' : "Confirm, I'm heading there" }}
+            </button>
+            <button
+              type="button"
+              class="w-full h-11 rounded-xl font-semibold text-sm bg-white border border-slate-200 text-slate-600 hover:border-slate-300 transition-colors duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+              :disabled="modalLoading"
+              @click="closeModals"
+            >
+              Not yet
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- ─── Modal: Are you still coming? ─────────────────────────────────────── -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div
+        v-if="showLateModal"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="late-title"
+      >
+        <!-- Backdrop (no close-on-click — patient must make a choice) -->
+        <div class="absolute inset-0 bg-black/40" aria-hidden="true" />
+
+        <!-- Sheet -->
+        <div class="relative w-full max-w-sm bg-white rounded-2xl shadow-xl p-6 space-y-5">
+          <!-- Icon -->
+          <div class="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center">
+            <svg class="w-6 h-6 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+          </div>
+
+          <div>
+            <h2 id="late-title" class="font-heading font-semibold text-text text-lg">Are you still coming?</h2>
+            <p class="text-sm text-slate-500 mt-1 text-pretty">
+              Based on your travel time, you may arrive after your appointment slot.
+              Let us know so we can manage the queue.
+            </p>
+          </div>
+
+          <!-- Error -->
+          <div v-if="modalError" role="alert" class="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            {{ modalError }}
+          </div>
+
+          <div class="flex flex-col gap-2.5">
+            <button
+              type="button"
+              class="w-full h-11 rounded-xl font-semibold text-sm bg-cta text-white hover:bg-cta/90 transition-colors duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              :disabled="modalLoading"
+              @click="handleLateConfirm(true)"
+            >
+              <svg v-if="modalLoading" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+              </svg>
+              Yes, I'm still coming
+            </button>
+            <button
+              type="button"
+              class="w-full h-11 rounded-xl font-semibold text-sm bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-red-400 disabled:opacity-60 disabled:cursor-not-allowed"
+              :disabled="modalLoading"
+              @click="handleLateConfirm(false)"
+            >
+              No, cancel my slot
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
+
+<style scoped>
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-active .relative,
+.modal-leave-active .relative {
+  transition: transform 0.2s ease;
+}
+.modal-enter-from .relative,
+.modal-leave-to .relative {
+  transform: translateY(1rem);
+}
+</style>

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package payment;
+
+service PaymentService {
+  rpc CreatePaymentRequest (PaymentRequest) returns (PaymentResponse);
+}
+
+message PaymentRequest {
+  string appointment_id = 1;
+  string patient_id     = 2;
+}
+
+message PaymentResponse {
+  string payment_id   = 1;
+  string payment_link = 2;
+}
