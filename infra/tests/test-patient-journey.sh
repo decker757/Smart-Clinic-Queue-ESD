@@ -360,16 +360,14 @@ grpcurl -plaintext "$GRPC_STRIPE" list 2>/dev/null | grep -q "payment.PaymentSer
   echo "WARN: reflection not returning PaymentService (is stripe-service running?)"
 
 echo ""
-echo "--- G2. CreatePayment (requires valid STRIPE_API_KEY) ---"
+echo "--- G2. CreatePaymentRequest (requires valid STRIPE_API_KEY) ---"
 grpcurl -plaintext \
   -proto "$PROTO" \
   -d "{
-    \"patient_id\": \"$USER_ID\",
-    \"amount\": 2500,
-    \"currency\": \"sgd\",
-    \"consultation_id\": \"$APPT_A\"
+    \"appointment_id\": \"$APPT_A\",
+    \"patient_id\": \"$USER_ID\"
   }" \
-  "$GRPC_STRIPE" payment.PaymentService/CreatePayment 2>&1 | jq . 2>/dev/null || \
+  "$GRPC_STRIPE" payment.PaymentService/CreatePaymentRequest 2>&1 | jq . 2>/dev/null || \
   echo "(gRPC INTERNAL error expected if Stripe key is test/invalid)"
 
 # ─────────────────────────────────────────────────────────────────────────────
