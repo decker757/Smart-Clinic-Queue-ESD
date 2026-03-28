@@ -40,7 +40,7 @@ async function fetchDoctors() {
   loading.value = true
   error.value = ''
   try {
-    const res = await fetch(`${API}/api/doctors`, { headers: authHeaders() })
+    const res = await fetch(`${API}/api/composite/staff/doctors`, { headers: authHeaders() })
     if (!res.ok) throw new Error('Failed to load doctors')
     const data = await res.json()
     doctors.value = data.doctors || data || []
@@ -62,7 +62,7 @@ async function fetchSlots(doctorId) {
   slotsLoading.value = true
   error.value = ''
   try {
-    const res = await fetch(`${API}/api/doctors/${doctorId}/slots`, {
+    const res = await fetch(`${API}/api/composite/staff/doctors/${doctorId}/slots`, {
       headers: authHeaders(),
       signal: slotsAbortController.signal,
     })

@@ -264,9 +264,9 @@ register stripe-service <<EOF
     "portMappings": [{"containerPort": 8001}, {"containerPort": 50051}],
     "environment": [
       {"name": "STRIPE_API_KEY", "value": "sk_test_51TDe9SB5GxrqfIetUJPN5mtBAz5lcDGJ0vLgPzRtyHhBOtxrr4oasIWImu667pvPkAKw5GwPGOxGy8EY3qjLQb7L004IM2PqUu"},
-      {"name": "STRIPE_WEBHOOK_SIGNING_SECRET", "value": "whsec_685dcb3e9b7bbc809bdc8be836b74c9f9cda81b315cc473b1854ed16cc9b1229"},
+      {"name": "STRIPE_WEBHOOK_SIGNING_SECRET", "value": "whsec_ppfgdog90JAFwMUWxOIsdD4p1HId4IvE"},
       {"name": "RABBITMQ_URL", "value": "$MQ_URL"},
-      {"name": "FRONTEND_BASE_URL", "value": "http://TO_BE_FILLED"},
+      {"name": "FRONTEND_BASE_URL", "value": "http://smart-clinic-alb-2054248031.ap-southeast-1.elb.amazonaws.com"},
       {"name": "CONSULTATION_FEE_CENTS", "value": "5000"},
       {"name": "CURRENCY", "value": "sgd"}
     ],

@@ -18,7 +18,7 @@ async def require_auth(authorization: str = Header(...)) -> AuthContext:
     return AuthContext(
         token=token,
         user_id=payload["sub"],
-        role=payload.get("role", ""),
+        role=payload.get("custom:role", payload.get("role", "")),
     )
 
 

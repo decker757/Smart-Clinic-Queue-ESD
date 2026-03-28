@@ -20,6 +20,7 @@ async def verify_token(token: str) -> dict | None:
             token,
             signing_key.key,
             algorithms=["RS256"],
+            options={"verify_aud": False},
         )
         return payload
     except jwt.PyJWTError:

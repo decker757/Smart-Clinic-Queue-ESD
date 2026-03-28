@@ -65,7 +65,7 @@ export function useAuth() {
       })
       const idToken = data.AuthenticationResult.IdToken
       const payload = JSON.parse(atob(idToken.split('.')[1]))
-      authStore.setAuth(idToken, { email, name: payload.name ?? email })
+      authStore.setAuth(idToken, { id: payload.sub, email, name: payload.name ?? email })
       _redirectAfterLogin()
     })
   }

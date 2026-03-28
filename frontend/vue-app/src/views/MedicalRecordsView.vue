@@ -53,7 +53,7 @@ async function loadMemos() {
   loading.value = true
   fetchError.value = ''
   try {
-    const res = await fetch(`${API_BASE}/api/patients/${patientId()}/memos`, {
+    const res = await fetch(`${API_BASE}/api/composite/patients/${patientId()}/memos`, {
       headers: authHeaders(),
     })
     if (res.status === 404) { memos.value = []; return }
@@ -77,7 +77,7 @@ async function submitText() {
   submitError.value = ''
   submitting.value = true
   try {
-    const res = await fetch(`${API_BASE}/api/patients/${patientId()}/memos`, {
+    const res = await fetch(`${API_BASE}/api/composite/patients/${patientId()}/memos`, {
       method: 'POST',
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: textTitle.value.trim(), content: textContent.value.trim() }),
@@ -112,7 +112,7 @@ async function submitFile() {
     form.append('title', fileTitle.value.trim())
     form.append('file', selectedFile.value)
 
-    const res = await fetch(`${API_BASE}/api/patients/${patientId()}/memos/upload`, {
+    const res = await fetch(`${API_BASE}/api/composite/patients/${patientId()}/memos/upload`, {
       method: 'POST',
       headers: authHeaders(),  // no Content-Type — browser sets multipart boundary
       body: form,
