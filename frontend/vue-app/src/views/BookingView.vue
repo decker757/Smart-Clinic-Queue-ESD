@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -8,8 +8,11 @@ const authStore = useAuthStore()
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
+const MODE = { SESSION: 'session', DOCTOR: 'doctor' }
+const SESSION = { MORNING: 'morning', AFTERNOON: 'afternoon' }
+
 // ── Booking mode ──
-const bookingMode = ref('session') // 'session' | 'doctor'
+const bookingMode = ref(MODE.SESSION)
 
 // ── Shared state ──
 const loading = ref(false)
@@ -17,7 +20,7 @@ const error = ref('')
 const success = ref('')
 
 // ── Mode A: Session ──
-const selectedSession = ref(null) // 'morning' | 'afternoon'
+const selectedSession = ref(null)
 
 // ── Mode B: Doctor + Date + Slot ──
 const doctors = ref([])
@@ -27,10 +30,15 @@ const availableSlots = ref([])
 const selectedSlot = ref(null)
 const slotsLoading = ref(false)
 let slotsAbortController = null
+let redirectTimer = null
 
-// ── Date constraints (SGT) ──
-const today = new Date(Date.now() + 8 * 3_600_000).toISOString().split('T')[0]
-const maxDate = new Date(Date.now() + 8 * 3_600_000 + 30 * 86_400_000).toISOString().split('T')[0]
+// ── Date constraints (SGT) — recomputed each time they're read ──
+function sgtToday() {
+  return new Date(Date.now() + 8 * 3_600_000).toISOString().split('T')[0]
+}
+function sgtMaxDate() {
+  return new Date(Date.now() + 8 * 3_600_000 + 30 * 86_400_000).toISOString().split('T')[0]
+}
 
 // ── Helpers ──
 function authHeaders() {
@@ -38,17 +46,14 @@ function authHeaders() {
 }
 
 function formatSlotTime(slot) {
-  const start = new Date(slot.start_time)
-  const end = new Date(slot.end_time)
-  const startTime = start.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })
-  const endTime = end.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })
-  return `${startTime} – ${endTime}`
+  const fmt = (d) => new Date(d).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })
+  return `${fmt(slot.start_time)} – ${fmt(slot.end_time)}`
 }
 
 // ── Computed ──
 const canBook = computed(() => {
   if (loading.value) return false
-  return bookingMode.value === 'session'
+  return bookingMode.value === MODE.SESSION
     ? !!selectedSession.value
     : !!(selectedDoctor.value && selectedSlot.value)
 })
@@ -83,9 +88,10 @@ async function fetchDoctors() {
 
 function selectDoctor(doctorId) {
   selectedDoctor.value = doctorId
-  selectedDate.value = ''
   availableSlots.value = []
   selectedSlot.value = null
+  // If date already chosen, fetch slots for the new doctor immediately
+  if (selectedDate.value) fetchSlots()
 }
 
 async function fetchSlots() {
@@ -123,7 +129,7 @@ async function bookAppointment() {
   }
 
   let body
-  if (bookingMode.value === 'session') {
+  if (bookingMode.value === MODE.SESSION) {
     body = { patient_id: patientId, session: selectedSession.value }
   } else {
     const slot = availableSlots.value.find((s) => s.id === selectedSlot.value)
@@ -137,10 +143,11 @@ async function bookAppointment() {
   loading.value = true
   error.value = ''
   success.value = ''
+  const idempotencyKey = crypto.randomUUID()
   try {
     const res = await fetch(`${API}/api/composite/appointments`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: { ...authHeaders(), 'X-Idempotency-Key': idempotencyKey },
       body: JSON.stringify(body),
     })
     if (!res.ok) {
@@ -148,7 +155,7 @@ async function bookAppointment() {
       throw new Error(resp.detail || 'Booking failed')
     }
     success.value = 'Appointment booked successfully!'
-    setTimeout(() => router.push('/dashboard'), 1500)
+    redirectTimer = setTimeout(() => router.push('/dashboard'), 1500)
   } catch (e) {
     error.value = e.message
   } finally {
@@ -157,6 +164,10 @@ async function bookAppointment() {
 }
 
 onMounted(fetchDoctors)
+onUnmounted(() => {
+  slotsAbortController?.abort()
+  clearTimeout(redirectTimer)
+})
 </script>
 
 <template>
@@ -175,38 +186,38 @@ onMounted(fetchDoctors)
       <!-- Mode tabs -->
       <div class="flex gap-1 mb-8 bg-gray-100 p-1 rounded-lg">
         <button
-          @click="switchMode('session')"
+          @click="switchMode(MODE.SESSION)"
           class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition"
-          :class="bookingMode === 'session' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'"
+          :class="bookingMode === MODE.SESSION ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'"
         >
           Walk-in (Session)
         </button>
         <button
-          @click="switchMode('doctor')"
+          @click="switchMode(MODE.DOCTOR)"
           class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition"
-          :class="bookingMode === 'doctor' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'"
+          :class="bookingMode === MODE.DOCTOR ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'"
         >
           Book with Doctor
         </button>
       </div>
 
       <!-- ── Mode A: Walk-in session ── -->
-      <div v-if="bookingMode === 'session'">
+      <div v-if="bookingMode === MODE.SESSION">
         <section class="mb-8">
           <h2 class="text-lg font-semibold text-gray-800 mb-3">Choose a Session</h2>
           <div class="grid grid-cols-2 gap-3">
             <button
-              @click="selectedSession = 'morning'"
+              @click="selectedSession = SESSION.MORNING"
               class="p-4 text-left border rounded-lg transition"
-              :class="selectedSession === 'morning' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'"
+              :class="selectedSession === SESSION.MORNING ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'"
             >
               <div class="font-medium text-gray-900">Morning</div>
               <div class="text-sm text-gray-500">09:00 – 12:00</div>
             </button>
             <button
-              @click="selectedSession = 'afternoon'"
+              @click="selectedSession = SESSION.AFTERNOON"
               class="p-4 text-left border rounded-lg transition"
-              :class="selectedSession === 'afternoon' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'"
+              :class="selectedSession === SESSION.AFTERNOON ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'"
             >
               <div class="font-medium text-gray-900">Afternoon</div>
               <div class="text-sm text-gray-500">14:00 – 17:00</div>
@@ -241,8 +252,8 @@ onMounted(fetchDoctors)
           <input
             type="date"
             v-model="selectedDate"
-            :min="today"
-            :max="maxDate"
+            :min="sgtToday()"
+            :max="sgtMaxDate()"
             @change="fetchSlots"
             class="w-full p-3 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500"
           />

@@ -67,6 +67,8 @@ router.patch("/slots/:slot_id", async (req: Request, res: Response) => {
     } catch (e: any) {
         if (e.message === "Slot not found") {
             res.status(404).json({ error: e.message });
+        } else if (e.message === "Slot already booked") {
+            res.status(409).json({ error: e.message });
         } else {
             res.status(500).json({ error: "Internal server error" });
         }

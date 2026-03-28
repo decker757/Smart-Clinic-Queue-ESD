@@ -1,9 +1,10 @@
+import asyncio
 import json
 import aio_pika
 from dataclasses import dataclass
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
+from typing import List, Optional
 from src.config import settings
 from src.models.appointment import (
     CreateAppointmentRequest,
@@ -14,6 +15,10 @@ from src.models.appointment import (
 from src.services import auth, appointment as appointment_service
 
 app = FastAPI(title="Appointment Composite Service", version="1.0.0")
+
+# In-memory idempotency cache: key → serialised AppointmentResponse dict
+# Prevents duplicate appointment creation when clients retry on network failures.
+_idempotency_cache: dict[str, dict] = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -86,25 +91,49 @@ async def list_appointments(
 async def create_appointment(
     body: CreateAppointmentRequest,
     auth_ctx: AuthContext = Depends(require_auth),
+    x_idempotency_key: Optional[str] = Header(None),
 ):
     if body.patient_id != auth_ctx.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Return cached response for duplicate requests (client retry after network failure)
+    if x_idempotency_key and x_idempotency_key in _idempotency_cache:
+        return _idempotency_cache[x_idempotency_key]
 
     appt = await appointment_service.create_appointment(
         AppointmentServiceRequest(**body.model_dump(exclude={"slot_id"})),
         auth_ctx.token,
     )
 
-    if body.slot_id:
-        await appointment_service.mark_slot_booked(body.slot_id, auth_ctx.token)
-
-    await publish_event("appointment.booked", AppointmentBookedEvent(
+    event_payload = AppointmentBookedEvent(
         appointment_id=appt.id,
         patient_id=appt.patient_id,
         doctor_id=appt.doctor_id,
         start_time=appt.start_time,
         session=appt.session,
-    ).model_dump(mode="json"))
+    ).model_dump(mode="json")
+
+    if body.slot_id:
+        try:
+            # mark_slot_booked and publish_event are independent — run concurrently
+            await asyncio.gather(
+                appointment_service.mark_slot_booked(body.slot_id, auth_ctx.token),
+                publish_event("appointment.booked", event_payload),
+            )
+        except HTTPException as e:
+            if e.status_code == 409:
+                # Slot was taken by a concurrent booking — cancel the just-created appointment
+                try:
+                    await appointment_service.cancel_appointment(appt.id, auth_ctx.token)
+                except Exception:
+                    pass
+                raise HTTPException(status_code=409, detail="This time slot was just booked by someone else. Please choose another.")
+            raise
+    else:
+        await publish_event("appointment.booked", event_payload)
+
+    if x_idempotency_key:
+        _idempotency_cache[x_idempotency_key] = appt.model_dump(mode="json")
 
     return appt
 

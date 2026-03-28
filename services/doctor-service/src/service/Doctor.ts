@@ -87,10 +87,19 @@ export async function generateSlots(
 }
 
 export async function updateSlotStatus(slot_id: string, status: string): Promise<TimeSlot> {
+    // When marking as booked, only update if the slot is still available — prevents double-booking race
+    const condition = status === "booked" ? "AND status = 'available'" : "";
     const { rows } = await pool.query(
-        `UPDATE doctors.time_slots SET status = $1 WHERE id = $2 RETURNING *`,
+        `UPDATE doctors.time_slots SET status = $1 WHERE id = $2 ${condition} RETURNING *`,
         [status, slot_id]
     );
-    if (!rows[0]) throw new Error("Slot not found");
+    if (!rows[0]) {
+        // Distinguish "not found" from "already booked" so callers can return the right status code
+        const { rows: check } = await pool.query(
+            `SELECT id FROM doctors.time_slots WHERE id = $1`, [slot_id]
+        );
+        if (!check[0]) throw new Error("Slot not found");
+        throw new Error("Slot already booked");
+    }
     return rows[0] as TimeSlot;
 }
