@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/stores/auth'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+const WS_BASE  = import.meta.env.VITE_WS_BASE_URL  ?? API_BASE
 
 // Active appointment statuses — completed/cancelled/no_show are ignored.
 const ACTIVE_STATUSES = new Set(['scheduled', 'checked_in', 'in_progress'])
@@ -53,11 +54,12 @@ function formatAppointmentDate(appt) {
 //      http://localhost:8000    → ws://localhost:8000
 //      '' (same origin)         → ws://<current host>
 export function wsBase() {
-  if (!API_BASE) {
+  const base = WS_BASE || API_BASE
+  if (!base) {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     return `${proto}://${location.host}`
   }
-  return API_BASE.replace(/^https/, 'wss').replace(/^http/, 'ws')
+  return base.replace(/^https/, 'wss').replace(/^http/, 'ws')
 }
 
 /**

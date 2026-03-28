@@ -8,7 +8,7 @@ _jwks_client: PyJWKClient | None = None
 def _get_jwks_client() -> PyJWKClient:
     global _jwks_client
     if _jwks_client is None:
-        _jwks_client = PyJWKClient(f"{settings.AUTH_SERVICE_URL}/api/auth/jwks")
+        _jwks_client = PyJWKClient(settings.JWKS_URL)
     return _jwks_client
 
 
@@ -20,8 +20,6 @@ async def verify_token(token: str) -> dict | None:
             token,
             signing_key.key,
             algorithms=["RS256"],
-            audience="smart-clinic-services",
-            issuer="smart-clinic",
         )
         return payload
     except jwt.PyJWTError:

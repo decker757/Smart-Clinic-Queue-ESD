@@ -85,7 +85,7 @@ staffWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         }
 
         const payload = decodeJwtPayload(token);
-        if (!payload?.sub || !STAFF_ROLES.has(payload.role as string)) {
+        if (!payload?.sub || !STAFF_ROLES.has((payload["custom:role"] ?? payload.role) as string)) {
             ws.close(1008, "Staff access required");
             return;
         }

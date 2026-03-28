@@ -2,15 +2,33 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+const COGNITO_CLIENT_ID = '4iboa3a11vktthtupoidetvk9o'
+const COGNITO_ENDPOINT = 'https://cognito-idp.ap-southeast-1.amazonaws.com/'
 
-async function _exchangeForJwt(sessionToken) {
-  const res = await fetch(`${API_BASE}/api/auth/token`, {
-    headers: { Authorization: `Bearer ${sessionToken}` },
+async function cognitoRequest(target, body) {
+  const res = await fetch(COGNITO_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-amz-json-1.1',
+      'X-Amz-Target': `AWSCognitoIdentityProviderService.${target}`,
+    },
+    body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error('Could not obtain access token. Please try again.')
-  const { token } = await res.json()
-  return token
+  const data = await res.json()
+  if (!res.ok) throw Object.assign(new Error(data.message ?? 'Auth error'), { code: data.__type })
+  return data
+}
+
+function friendlyError(e) {
+  const code = e.code ?? ''
+  if (code === 'NotAuthorizedException') return 'Incorrect email or password.'
+  if (code === 'UserNotFoundException') return 'No account found with this email.'
+  if (code === 'UsernameExistsException') return 'An account with this email already exists.'
+  if (code === 'InvalidPasswordException') return e.message
+  if (code === 'CodeMismatchException') return 'Incorrect verification code.'
+  if (code === 'ExpiredCodeException') return 'Verification code expired. Please request a new one.'
+  if (code === 'LimitExceededException') return 'Too many attempts. Please wait a moment and try again.'
+  return e.message ?? 'Something went wrong. Please try again.'
 }
 
 export function useAuth() {
@@ -24,9 +42,9 @@ export function useAuth() {
     loading.value = true
     error.value = ''
     try {
-      await fn()
+      return await fn()
     } catch (e) {
-      error.value = e.message
+      error.value = friendlyError(e)
     } finally {
       loading.value = false
     }
@@ -40,42 +58,31 @@ export function useAuth() {
 
   function signIn(email, password) {
     return _withAuthFlow(async () => {
-      const res = await fetch(`${API_BASE}/api/auth/sign-in/email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      const data = await cognitoRequest('InitiateAuth', {
+        AuthFlow: 'USER_PASSWORD_AUTH',
+        ClientId: COGNITO_CLIENT_ID,
+        AuthParameters: { USERNAME: email, PASSWORD: password },
       })
-
-      if (!res.ok) {
-        throw new Error(
-          res.status === 401 ? 'Incorrect email or password.' : 'Something went wrong. Please try again.'
-        )
-      }
-
-      const { token: sessionToken, user } = await res.json()
-      const jwt = await _exchangeForJwt(sessionToken)
-      authStore.setAuth(jwt, user)
+      const idToken = data.AuthenticationResult.IdToken
+      const payload = JSON.parse(atob(idToken.split('.')[1]))
+      authStore.setAuth(idToken, { email, name: payload.name ?? email })
       _redirectAfterLogin()
     })
   }
 
   function signUp(name, email, password) {
     return _withAuthFlow(async () => {
-      const res = await fetch(`${API_BASE}/api/auth/sign-up/email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+      await cognitoRequest('SignUp', {
+        ClientId: COGNITO_CLIENT_ID,
+        Username: crypto.randomUUID(),
+        Password: password,
+        UserAttributes: [
+          { Name: 'email', Value: email },
+          { Name: 'name', Value: name },
+          { Name: 'custom:role', Value: 'patient' },
+        ],
       })
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body?.message ?? 'Registration failed. Please try again.')
-      }
-
-      const { token: sessionToken, user } = await res.json()
-      const jwt = await _exchangeForJwt(sessionToken)
-      authStore.setAuth(jwt, user)
-      _redirectAfterLogin()
+      router.push('/login')
     })
   }
 

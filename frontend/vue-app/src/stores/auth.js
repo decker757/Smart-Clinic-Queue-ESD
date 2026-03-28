@@ -21,7 +21,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Decode role from JWT payload
     try {
       const payload = JSON.parse(atob(token.split('.')[1]))
-      role.value = payload.role ?? null
+      role.value = payload['custom:role'] ?? payload.role ?? null
     } catch {
       role.value = null
     }

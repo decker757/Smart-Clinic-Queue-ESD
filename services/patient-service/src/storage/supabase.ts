@@ -1,11 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
-);
-
-const BUCKET = process.env.SUPABASE_BUCKET ?? "patient-memos";
+const s3 = new S3Client({ region: process.env.AWS_REGION ?? "ap-southeast-1" });
+const BUCKET = process.env.S3_BUCKET ?? "esd-smart-clinic-queue-prod-ap-southeast-1";
 
 export async function uploadFile(
     patientId: string,
@@ -13,13 +10,16 @@ export async function uploadFile(
     buffer: Buffer,
     mimetype: string
 ): Promise<string> {
-    const path = `${patientId}/${Date.now()}-${filename}`;
-    const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, buffer, { contentType: mimetype });
+    const key = `${patientId}/${Date.now()}-${filename}`;
 
-    if (error) throw new Error(`Upload failed: ${error.message}`);
+    await s3.send(new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: buffer,
+        ContentType: mimetype,
+    }));
 
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    return data.publicUrl;
+    return getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: key }), {
+        expiresIn: 604800, // 7 days
+    });
 }

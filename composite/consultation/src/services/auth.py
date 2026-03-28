@@ -26,8 +26,6 @@ async def verify_token(token: str) -> dict | None:
             token,
             signing_key.key,
             algorithms=["RS256"],
-            audience="smart-clinic-services",
-            issuer="smart-clinic",
         )
         return payload
     except jwt.PyJWTError:

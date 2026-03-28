@@ -30,7 +30,10 @@ type jwksResponse struct {
 // FetchPublicKey retrieves the RS256 public key from the auth-service JWKS endpoint.
 // Called once at startup — the service cannot run without it.
 func FetchPublicKey() (*rsa.PublicKey, error) {
-	url := os.Getenv("AUTH_SERVICE_URL") + "/api/auth/jwks"
+	url := os.Getenv("JWKS_URL")
+	if url == "" {
+		url = "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json"
+	}
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch JWKS from %s: %w", url, err)
@@ -78,8 +81,6 @@ func RequireAuth(pubKey *rsa.PublicKey) gin.HandlerFunc {
 			}
 			return pubKey, nil
 		},
-			jwt.WithIssuer("smart-clinic"),
-			jwt.WithAudience("smart-clinic-services"),
 			jwt.WithExpirationRequired(),
 		)
 		if err != nil || !token.Valid {
