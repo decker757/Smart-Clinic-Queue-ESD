@@ -2,6 +2,7 @@ import amqp from "amqplib";
 import * as AppointmentHandlers from "../handlers/appointment";
 import * as QueueHandlers from "../handlers/queue";
 import * as DoctorHandlers from "../handlers/doctor";
+import * as ConsultationHandlers from "../handlers/consultation";
 
 const EXCHANGE = "clinic.events";
 const QUEUE_NAME = "notification-service.events";
@@ -16,7 +17,8 @@ const HANDLERS: Record<string, (payload: any) => Promise<void>> = {
     "queue.removed":         QueueHandlers.handleRemoved,
     "queue.called":          QueueHandlers.handleQueueCalled,
     "queue.eta_alert":       QueueHandlers.handleEtaAlert,
-    "doctor.unavailable":    DoctorHandlers.handleDoctorUnavailable,
+    "doctor.unavailable":        DoctorHandlers.handleDoctorUnavailable,
+    "consultation.completed":    ConsultationHandlers.handleConsultationCompleted,
 };
 
 export async function startConsumer(): Promise<void> {
@@ -32,6 +34,7 @@ export async function startConsumer(): Promise<void> {
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "appointment.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "doctor.*");
+    await channel.bindQueue(QUEUE_NAME, EXCHANGE, "consultation.*");
 
     console.log(`[RabbitMQ] Notification service listening on ${QUEUE_NAME}`);
 

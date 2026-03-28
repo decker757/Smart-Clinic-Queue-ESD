@@ -1,5 +1,7 @@
+import httpx
 from fastapi import APIRouter, HTTPException
 from app.db import get_pool
+from app.config import settings
 
 router = APIRouter(prefix="/api/payments")
 
@@ -11,7 +13,7 @@ async def get_payment_history(consultation_id: str):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT id, consultation_id, patient_id, payment_intent_id, status, created_at
+            SELECT id, consultation_id, patient_id, payment_intent_id, status, payment_link, created_at
             FROM payments.payments
             WHERE consultation_id = $1
             ORDER BY created_at DESC
@@ -23,6 +25,43 @@ async def get_payment_history(consultation_id: str):
     return [dict(r) for r in rows]
 
 
+@router.post("/consultation/{consultation_id}/refresh")
+async def refresh_payment_link(consultation_id: str):
+    """Create a new Stripe checkout session and update the stored payment_link."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT patient_id, status FROM payments.payments WHERE consultation_id = $1 ORDER BY created_at DESC LIMIT 1",
+            consultation_id,
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="No payment record found")
+    if row["status"] == "paid":
+        raise HTTPException(status_code=400, detail="Payment already completed")
+
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            f"{settings.STRIPE_SERVICE_URL}/api/payments/create-session",
+            json={"appointment_id": consultation_id, "patient_id": row["patient_id"]},
+            timeout=15,
+        )
+    if not res.is_success:
+        raise HTTPException(status_code=502, detail="Could not create payment session")
+
+    data = res.json()
+    new_link = data["payment_link"]
+    new_session_id = data["session_id"]
+
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """UPDATE payments.payments
+               SET payment_link = $1, payment_intent_id = $2
+               WHERE consultation_id = $3""",
+            new_link, new_session_id, consultation_id,
+        )
+
+    return {"payment_link": new_link}
+
 @router.get("/patient/{patient_id}")
 async def get_patient_payment_history(patient_id: str):
     """Return all payment attempts for a patient, newest first."""
@@ -30,7 +69,7 @@ async def get_patient_payment_history(patient_id: str):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT id, consultation_id, patient_id, payment_intent_id, status, created_at
+            SELECT id, consultation_id, patient_id, payment_intent_id, status, payment_link, created_at
             FROM payments.payments
             WHERE patient_id = $1
             ORDER BY created_at DESC

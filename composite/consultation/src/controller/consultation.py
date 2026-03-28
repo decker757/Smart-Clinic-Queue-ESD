@@ -46,6 +46,7 @@ async def complete_consultation(
                 content=mc_content,
                 record_type="mc",
                 issued_by=body.doctor_id,
+                appointment_id=body.appointment_id,
             )
         except grpc.RpcError as e:
             raise HTTPException(
@@ -62,6 +63,7 @@ async def complete_consultation(
                 content=body.prescribed_medication,
                 record_type="prescription",
                 issued_by=body.doctor_id,
+                appointment_id=body.appointment_id,
             )
         except grpc.RpcError as e:
             raise HTTPException(
@@ -113,10 +115,7 @@ async def complete_consultation(
             patient_id=body.patient_id,
         )
     except grpc.RpcError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create payment request: {e.details()}",
-        )
+        logger.warning("Failed to create payment request: %s", e.details())
 
     # ── Step 6: Publish consultation.completed event ─────────
     # Queue removal, notification, and activity logging happen

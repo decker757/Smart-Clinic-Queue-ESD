@@ -28,6 +28,7 @@ message CreatePatientRequest {
   string dob                = 3;
   string nric               = 4;
   repeated string allergies = 5;
+  string gender             = 6;
 }
 
 message UpdatePatientRequest {
@@ -36,6 +37,7 @@ message UpdatePatientRequest {
   string dob                = 3;
   string nric               = 4;
   repeated string allergies = 5;
+  string gender             = 6;
 }
 
 message PatientResponse {
@@ -96,23 +98,25 @@ message CreateFileMemoRequest {
 }
 
 message CreateDoctorRecordRequest {
-  string patient_id   = 1;
-  string title        = 2;
-  string content      = 3;
-  string record_type  = 4; // "mc" or "prescription"
-  string issued_by    = 5;
+  string patient_id      = 1;
+  string title           = 2;
+  string content         = 3;
+  string record_type     = 4; // "mc" or "prescription"
+  string issued_by       = 5;
+  string appointment_id  = 6;
 }
 
 message MemoResponse {
-  string id          = 1;
-  string patient_id  = 2;
-  string title       = 3;
-  string content     = 4;
-  string file_url    = 5;
-  string file_type   = 6;
-  string record_type = 7;
-  string issued_by   = 8;
-  string created_at  = 9;
+  string id             = 1;
+  string patient_id     = 2;
+  string title          = 3;
+  string content        = 4;
+  string file_url       = 5;
+  string file_type      = 6;
+  string record_type    = 7;
+  string issued_by      = 8;
+  string created_at     = 9;
+  string appointment_id = 10;
 }
 
 message MemoListResponse {

@@ -58,7 +58,27 @@ watch(
 // (e.g. the appointment-service flipping in_progress once the doctor opens the record)
 const FALLBACK_POLL_MS = 60_000
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+
+async function checkProfile() {
+  const pid = authStore.user?.id
+  if (!pid) return
+  try {
+    const res = await fetch(`${API_BASE}/api/composite/patients/${pid}`, {
+      headers: { Authorization: `Bearer ${authStore.jwt}` },
+    })
+    if (res.status === 404) { router.push('/profile'); return }
+    if (res.ok) {
+      const data = await res.json()
+      if (!data.phone) router.push('/profile')
+    }
+  } catch {
+    // non-fatal — let dashboard load normally
+  }
+}
+
 onMounted(() => {
+  checkProfile()
   loadDashboard()
   fallbackTimer = setInterval(loadDashboard, FALLBACK_POLL_MS)
 })
@@ -99,6 +119,30 @@ const showOnMyWayModal = ref(false)
 const showLateModal = ref(false)
 const modalLoading = ref(false)
 const modalError = ref('')
+const showCancelModal = ref(false)
+const cancellingAppt = ref(false)
+
+async function confirmCancelAppointment() {
+  if (!appointment.value) return
+  cancellingAppt.value = true
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/composite/appointments/${appointment.value.id}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${authStore.jwt}` } },
+    )
+    if (res.ok) {
+      wsConnection?.close()
+      wsConnection = null
+      appointment.value = null
+      showCancelModal.value = false
+    } else {
+      actionError.value = 'Could not cancel appointment. Please try again.'
+      showCancelModal.value = false
+    }
+  } finally {
+    cancellingAppt.value = false
+  }
+}
 
 function openCheckInModal() {
   if (!appointment.value || appointment.value.status !== 'waiting') return
@@ -388,6 +432,16 @@ async function handleLateConfirm(isComing) {
             >
               View Queue Status
             </button>
+            <!-- Cancel button — shown while waiting or checked in -->
+            <button
+              v-if="appointment.status === 'waiting' || appointment.status === 'checked_in'"
+              type="button"
+              class="w-full h-11 rounded-xl font-semibold text-sm text-red-600 border border-red-200 hover:bg-red-50 transition-colors duration-150 cursor-pointer disabled:opacity-50 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-red-400"
+              :disabled="cancellingAppt"
+              @click="showCancelModal = true"
+            >
+              {{ cancellingAppt ? 'Cancelling…' : 'Cancel Appointment' }}
+            </button>
           </div>
         </div>
       </section>
@@ -422,6 +476,7 @@ async function handleLateConfirm(isComing) {
             type="button"
             class="group bg-white border border-slate-200 rounded-2xl px-4 py-5 text-left hover:border-primary hover:shadow-sm transition-all duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
             aria-label="View appointment history"
+            @click="router.push('/history')"
           >
             <div class="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/12 transition-colors duration-150">
               <!-- ClockIcon -->
@@ -441,7 +496,6 @@ async function handleLateConfirm(isComing) {
             @click="router.push('/records')"
           >
             <div class="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/12 transition-colors duration-150">
-              <!-- DocumentText -->
               <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round"
                   d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -449,6 +503,22 @@ async function handleLateConfirm(isComing) {
             </div>
             <p class="font-semibold text-sm text-text text-balance">Medical Records</p>
             <p class="text-xs text-slate-500 mt-0.5 text-pretty">Upload notes &amp; documents</p>
+          </button>
+
+          <!-- My Profile -->
+          <button
+            type="button"
+            class="group bg-white border border-slate-200 rounded-2xl px-4 py-5 text-left hover:border-primary hover:shadow-sm transition-all duration-150 cursor-pointer focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            aria-label="Edit your profile"
+            @click="router.push('/profile')"
+          >
+            <div class="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center mb-3 group-hover:bg-primary/12 transition-colors duration-150">
+              <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+              </svg>
+            </div>
+            <p class="font-semibold text-sm text-text text-balance">My Profile</p>
+            <p class="text-xs text-slate-500 mt-0.5 text-pretty">Update personal details</p>
           </button>
         </div>
       </section>
@@ -575,6 +645,53 @@ async function handleLateConfirm(isComing) {
               @click="handleLateConfirm(false)"
             >
               No, cancel my slot
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- ─── Modal: Cancel Appointment ─────────────────────────────────────────── -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div
+        v-if="showCancelModal"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancel-appt-title"
+        @click.self="showCancelModal = false"
+      >
+        <div class="absolute inset-0 bg-black/40" aria-hidden="true" />
+        <div class="relative w-full max-w-sm bg-white rounded-2xl shadow-xl p-6 space-y-5">
+          <!-- Icon -->
+          <div class="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center">
+            <svg class="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <div>
+            <h2 id="cancel-appt-title" class="font-heading font-semibold text-text text-lg">Cancel appointment?</h2>
+            <p class="text-sm text-slate-500 mt-1 text-pretty">
+              This will remove you from the queue. You'll need to book a new appointment to be seen.
+            </p>
+          </div>
+          <div class="flex gap-3">
+            <button
+              type="button"
+              class="flex-1 h-11 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors duration-150 cursor-pointer"
+              @click="showCancelModal = false"
+            >
+              Keep Appointment
+            </button>
+            <button
+              type="button"
+              class="flex-1 h-11 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors duration-150 cursor-pointer disabled:opacity-50"
+              :disabled="cancellingAppt"
+              @click="confirmCancelAppointment"
+            >
+              {{ cancellingAppt ? 'Cancelling…' : 'Yes, Cancel' }}
             </button>
           </div>
         </div>

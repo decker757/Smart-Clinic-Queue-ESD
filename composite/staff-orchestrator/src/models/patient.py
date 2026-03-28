@@ -4,9 +4,9 @@ from typing import List, Optional
 
 class PatientResponse(BaseModel):
     id: str
-    phone: str
-    dob: str
-    nric: str
+    phone: Optional[str] = None
+    dob: Optional[str] = None
+    nric: Optional[str] = None
     gender: Optional[str] = None
     allergies: Optional[List[str]] = []
     created_at: str

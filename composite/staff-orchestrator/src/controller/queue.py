@@ -105,6 +105,16 @@ async def complete_appointment(appointment_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+async def get_current_patient(doctor_id: str):
+    async with httpx.AsyncClient() as client:
+        res = await client.get(f"{settings.QUEUE_SERVICE_URL}/api/queue/current/{doctor_id}")
+        if res.status_code == 404:
+            return None
+        if not res.is_success:
+            raise HTTPException(status_code=502, detail="Failed to fetch current patient")
+        return res.json()
+
+
 async def call_next(body: CallNextRequest):
     try:
         result = await queue_service.call_next(

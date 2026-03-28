@@ -1,9 +1,11 @@
 import http from "http";
 import express, { Request, Response, NextFunction } from "express";
+import cron from "node-cron";
 import queueRouter from "./controller/Queue";
 import { startConsumer } from "./consumer/rabbitmq";
 import { createWsServer } from "./ws/manager";
 import { startGrpcServer } from "./grpc";
+import { resetDailyQueue } from "./service/Queue";
 
 const app = express();
 
@@ -37,3 +39,14 @@ startConsumer().catch((e) => {
 });
 
 startGrpcServer();
+
+// Reset queue every day at midnight SGT (UTC+8 = 16:00 UTC)
+cron.schedule("0 16 * * *", async () => {
+    console.log("[Cron] Running daily queue reset");
+    try {
+        await resetDailyQueue();
+        console.log("[Cron] Daily queue reset complete");
+    } catch (e) {
+        console.error("[Cron] Daily queue reset failed:", e);
+    }
+}, { timezone: "UTC" });

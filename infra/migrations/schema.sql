@@ -115,15 +115,16 @@ CREATE TABLE IF NOT EXISTS patients.medical_history (
 );
 
 CREATE TABLE IF NOT EXISTS patients.memos (
-    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id  TEXT        NOT NULL REFERENCES patients.patients(id),
-    title       TEXT        NOT NULL,
-    content     TEXT,
-    file_url    TEXT,
-    file_type   TEXT,
-    record_type TEXT        NOT NULL DEFAULT 'memo',
-    issued_by   TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id     TEXT        NOT NULL REFERENCES patients.patients(id),
+    title          TEXT        NOT NULL,
+    content        TEXT,
+    file_url       TEXT,
+    file_type      TEXT,
+    record_type    TEXT        NOT NULL DEFAULT 'memo',
+    issued_by      TEXT,
+    appointment_id TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_medical_history_patient ON patients.medical_history(patient_id);
@@ -171,6 +172,7 @@ CREATE TABLE IF NOT EXISTS payments.payments (
     patient_id        TEXT        NOT NULL,
     payment_intent_id TEXT,
     status            TEXT        NOT NULL,  -- 'pending' | 'paid' | 'failed'
+    payment_link      TEXT,
     created_at        TIMESTAMPTZ DEFAULT NOW()
 );
 

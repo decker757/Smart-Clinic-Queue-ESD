@@ -20,6 +20,16 @@ export function useDoctor() {
     return res.json()
   }
 
+  async function fetchCurrentPatient(doctorId) {
+    const res = await fetch(
+      `${API_BASE}/api/composite/staff/queue/current/${doctorId}`,
+      { headers: authHeaders(authStore.jwt) },
+    )
+    if (res.status === 404) return null
+    if (!res.ok) return null
+    return res.json()
+  }
+
   async function fetchDoctorSlots(doctorId) {
     const res = await fetch(
       `${API_BASE}/api/composite/staff/doctors/${doctorId}/slots`,
@@ -96,6 +106,7 @@ export function useDoctor() {
   return {
     fetchDoctorInfo,
     fetchDoctorSlots,
+    fetchCurrentPatient,
     callNextPatient,
     completeConsultation,
     fetchPatient,

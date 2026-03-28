@@ -21,7 +21,7 @@ class Settings:
 
     # ── Wrapper service URLs ─────────────────────────────────
     PAYMENT_SERVICE_GRPC: str = os.getenv(
-        "PAYMENT_SERVICE_GRPC", "payment-service:50056"
+        "PAYMENT_SERVICE_GRPC", "stripe-service:50051"
     )
 
     # ── Auth ─────────────────────────────────────────────────

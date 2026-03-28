@@ -16,9 +16,11 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
+    "@types/node-cron": "^3.0.11",
     "amqplib": "^0.10.9",
     "express": "^5.2.1",
     "ioredis": "^5.6.1",
+    "node-cron": "^4.2.1",
     "pg": "^8.19.0",
     "ws": "^8.19.0"
   },

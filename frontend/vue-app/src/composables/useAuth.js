@@ -74,7 +74,7 @@ export function useAuth() {
     return _withAuthFlow(async () => {
       await cognitoRequest('SignUp', {
         ClientId: COGNITO_CLIENT_ID,
-        Username: crypto.randomUUID(),
+        Username: (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`),
         Password: password,
         UserAttributes: [
           { Name: 'email', Value: email },
@@ -88,7 +88,7 @@ export function useAuth() {
 
   function signOut() {
     authStore.clearAuth()
-    router.push('/login')
+    window.location.replace('/login')
   }
 
   return { signIn, signUp, signOut, loading, error }

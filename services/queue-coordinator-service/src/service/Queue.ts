@@ -79,21 +79,36 @@ export async function getQueuePosition(appointment_id: string, callerId?: string
         }
 
         const response = await pool.query(`
-            SELECT queue_number, estimated_time, status FROM queue.queue_entries WHERE
-            appointment_id = $1;
-        `, [
-            appointment_id
-        ]);
+            SELECT e.queue_number, e.estimated_time, e.status, e.doctor_id, e.session,
+                   (SELECT COUNT(*) FROM queue.queue_entries a
+                    WHERE a.queue_number < e.queue_number
+                      AND a.status NOT IN ('done', 'cancelled')
+                      AND (
+                        (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
+                        OR
+                        (e.doctor_id IS NULL AND a.session = e.session AND a.doctor_id IS NULL)
+                      )
+                   ) AS active_ahead
+            FROM queue.queue_entries e
+            WHERE e.appointment_id = $1;
+        `, [appointment_id]);
         if (!response.rows[0] || ['done', 'cancelled'].includes(response.rows[0].status)){
             throw new Error("Appointment not in queue");
         }
 
+        const row = response.rows[0];
+        // Compute estimated_time dynamically if not stored: active_ahead * 15 min per patient
+        if (!row.estimated_time) {
+            const aheadMinutes = Number(row.active_ahead) * 15;
+            row.estimated_time = new Date(Date.now() + aheadMinutes * 60 * 1000).toISOString();
+        }
+
         try {
-            await redis.setex(cacheKey(appointment_id), CACHE_TTL, JSON.stringify(response.rows[0]));
+            await redis.setex(cacheKey(appointment_id), CACHE_TTL, JSON.stringify(row));
         } catch {
             console.warn("[Redis] unavailable, skipping cache write");
         }
-        return response.rows[0];
+        return row;
 
     } catch (e){
         console.error("Error fetching queue:", e);
@@ -230,6 +245,16 @@ export async function completeAppointment(appointment_id: string): Promise<Queue
     }
 }
 
+export async function getCurrentCalled(doctor_id: string): Promise<QueueEntry | null> {
+    const { rows } = await pool.query(`
+        SELECT * FROM queue.queue_entries
+        WHERE status = 'called' AND doctor_id = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+    `, [doctor_id]);
+    return rows[0] ?? null;
+}
+
 export async function callNext(session: string, doctor_id?: string): Promise<QueueEntry> {
     try {
         const { rows } = await pool.query(`
@@ -239,11 +264,11 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
                 SELECT id FROM queue.queue_entries
                 WHERE status = 'checked_in'
                   AND (
-                      -- specific-doctor booking: match by doctor_id, session is null
+                      -- specific-doctor booking: patient booked this doctor
                       ($2::text IS NOT NULL AND doctor_id = $2 AND session IS NULL)
                       OR
-                      -- session-based booking: match by session, no doctor assigned
-                      ($2::text IS NULL AND session = $1)
+                      -- session-based booking: no doctor preference, match by session
+                      (session = $1 AND doctor_id IS NULL)
                   )
                 ORDER BY queue_number ASC
                 LIMIT 1

@@ -6,7 +6,7 @@ export async function handleCheckedIn(payload: any) {
     if (!payload?.patient_id) { console.warn("[queue.checked_in] missing patient_id, skipping"); return; }
     const phone = await getPatientPhone(payload.patient_id);
     if (!phone) { console.warn(`No phone for patient ${payload.patient_id}`); return; }
-    await sendSms(phone, `You're checked in! Your queue number is ${payload.queue_number}.`);
+    await sendSms(phone, `You're checked in! Please wait for your turn — we'll notify you when it's coming up soon.`);
 }
 
 export async function handleQueueCalled(payload: any) {

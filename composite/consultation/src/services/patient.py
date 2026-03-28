@@ -15,6 +15,7 @@ async def create_doctor_record(
     content: str,
     record_type: str,  # "mc" or "prescription"
     issued_by: str,
+    appointment_id: str = "",
 ):
     """Create an MC or prescription record on the patient's profile."""
     response = await stub.CreateDoctorRecord(
@@ -24,6 +25,7 @@ async def create_doctor_record(
             content=content,
             record_type=record_type,
             issued_by=issued_by,
+            appointment_id=appointment_id,
         ),
         timeout=10,
     )

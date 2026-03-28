@@ -1,4 +1,4 @@
-"""gRPC client for payment-service (wrapper)."""
+"""gRPC client for stripe-service (Stripe wrapper)."""
 
 import grpc.aio
 

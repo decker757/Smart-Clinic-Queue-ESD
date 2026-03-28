@@ -27,12 +27,9 @@ app.use("/api/patients/:id/memos", memoRouter);
 
 const PORT = process.env.PORT ?? "3007";
 
-fetchPublicKey()
-    .then(() => {
-        app.listen(PORT, () => console.log(`[HTTP] Patient service on :${PORT}`));
-        startGrpcServer();
-    })
-    .catch((err) => {
-        console.error("[Auth] Failed to fetch public key:", err);
-        process.exit(1);
-    });
+startGrpcServer();
+app.listen(PORT, () => console.log(`[HTTP] Patient service on :${PORT}`));
+
+fetchPublicKey().catch((err) => {
+    console.error("[Auth] Failed to fetch public key:", err);
+});

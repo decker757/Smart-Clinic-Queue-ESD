@@ -27,4 +27,5 @@ class MemoResponse(BaseModel):
     file_type: Optional[str] = None
     record_type: str
     issued_by: Optional[str] = None
+    appointment_id: Optional[str] = None
     created_at: str

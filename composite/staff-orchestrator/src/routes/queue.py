@@ -36,6 +36,11 @@ async def complete_appointment(appointment_id: str, auth: AuthContext = Depends(
     return await queue_controller.complete_appointment(appointment_id)
 
 
+@router.get("/current/{doctor_id}")
+async def get_current_patient(doctor_id: str, auth: AuthContext = Depends(require_staff)):
+    return await queue_controller.get_current_patient(doctor_id)
+
+
 @router.post("/call-next")
 async def call_next(body: CallNextRequest, auth: AuthContext = Depends(require_staff)):
     return await queue_controller.call_next(body)

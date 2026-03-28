@@ -20,9 +20,8 @@ let wsHandle = null
 const appointmentId = route.params.appointmentId
 
 // ── Computed display values ──
-// queue_number is 1-based (NEXTVAL), so persons in front = queue_number - 1
 const personsInFront = computed(() =>
-  queuePosition.value ? Math.max(0, queuePosition.value.queue_number - 1) : null,
+  queuePosition.value ? Number(queuePosition.value.active_ahead ?? 0) : null,
 )
 
 const positionText = computed(() => {

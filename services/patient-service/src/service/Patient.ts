@@ -47,7 +47,7 @@ export async function updatePatient(id: string, data: Partial<Patient>): Promise
              updated_at = NOW()
          WHERE id = $1
          RETURNING *`,
-        [id, data.phone ?? null, data.dob ?? null, data.nric ?? null, data.gender ?? null, data.allergies ?? null]
+        [id, data.phone || null, data.dob || null, data.nric || null, data.gender || null, data.allergies?.length ? data.allergies : null]
     );
     return rows[0] ?? null;
 }

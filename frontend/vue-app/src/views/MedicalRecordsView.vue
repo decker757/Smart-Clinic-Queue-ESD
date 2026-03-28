@@ -26,6 +26,12 @@ const fileTitle = ref('')
 const selectedFile = ref(null)
 const fileInputRef = ref(null)
 
+// Expanded memo
+const expandedId = ref(null)
+function toggleMemo(id) {
+  expandedId.value = expandedId.value === id ? null : id
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function authHeaders() {
   return { Authorization: `Bearer ${authStore.jwt}` }
@@ -58,7 +64,7 @@ async function loadMemos() {
     })
     if (res.status === 404) { memos.value = []; return }
     if (!res.ok) throw new Error(`Failed to load records (${res.status})`)
-    memos.value = (await res.json()) ?? []
+    memos.value = ((await res.json()) ?? []).filter(m => m.record_type === 'memo')
   } catch (e) {
     fetchError.value = e.message ?? 'Could not load medical records.'
   } finally {
@@ -345,55 +351,69 @@ function cancelForms() {
         <li
           v-for="memo in memos"
           :key="memo.id"
-          class="bg-white rounded-2xl border border-slate-200 p-4 flex items-start gap-3"
+          class="bg-white rounded-2xl border border-slate-200 overflow-hidden"
         >
-          <!-- Icon -->
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            :class="{
-              'bg-blue-50': fileIcon(memo.file_type) === 'img',
-              'bg-red-50': fileIcon(memo.file_type) === 'pdf',
-              'bg-primary/8': fileIcon(memo.file_type) === 'doc' && memo.file_url,
-              'bg-slate-50': !memo.file_url,
-            }"
+          <!-- Summary row (always visible) -->
+          <button
+            type="button"
+            class="w-full text-left p-4 flex items-start gap-3 cursor-pointer hover:bg-slate-50 transition-colors duration-150"
+            @click="toggleMemo(memo.id)"
           >
-            <!-- Text note -->
-            <svg v-if="!memo.file_url" class="w-5 h-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
-            </svg>
-            <!-- Image -->
-            <svg v-else-if="fileIcon(memo.file_type) === 'img'" class="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-            </svg>
-            <!-- PDF -->
-            <svg v-else-if="fileIcon(memo.file_type) === 'pdf'" class="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
-            <!-- Generic doc -->
-            <svg v-else class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
-          </div>
+            <!-- Icon -->
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              :class="{
+                'bg-blue-50': fileIcon(memo.file_type) === 'img',
+                'bg-red-50': fileIcon(memo.file_type) === 'pdf',
+                'bg-primary/8': fileIcon(memo.file_type) === 'doc' && memo.file_url,
+                'bg-slate-50': !memo.file_url,
+              }"
+            >
+              <svg v-if="!memo.file_url" class="w-5 h-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+              </svg>
+              <svg v-else-if="fileIcon(memo.file_type) === 'img'" class="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+              </svg>
+              <svg v-else-if="fileIcon(memo.file_type) === 'pdf'" class="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+              </svg>
+              <svg v-else class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+              </svg>
+            </div>
 
-          <!-- Content -->
-          <div class="flex-1 min-w-0">
-            <p class="font-semibold text-sm text-text truncate">{{ memo.title }}</p>
-            <p v-if="memo.content" class="text-xs text-slate-500 mt-0.5 line-clamp-2">{{ memo.content }}</p>
-            <p class="text-xs text-slate-400 mt-1">{{ formatDate(memo.created_at) }}</p>
-          </div>
+            <!-- Summary -->
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-sm text-text truncate">{{ memo.title }}</p>
+              <p class="text-xs text-slate-400 mt-0.5">{{ formatDate(memo.created_at) }}</p>
+            </div>
 
-          <!-- Open file link -->
-          <a
-            v-if="memo.file_url"
-            :href="memo.file_url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/8 transition-colors duration-150"
-            aria-label="Open file"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            <!-- Chevron -->
+            <svg
+              class="w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200"
+              :class="expandedId === memo.id ? 'rotate-180' : ''"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
             </svg>
-          </a>
+          </button>
+
+          <!-- Expanded detail -->
+          <div v-if="expandedId === memo.id" class="border-t border-slate-100 px-4 py-4 space-y-3">
+            <p v-if="memo.content" class="text-sm text-text whitespace-pre-wrap">{{ memo.content }}</p>
+            <a
+              v-if="memo.file_url"
+              :href="memo.file_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+              Open File
+            </a>
+          </div>
         </li>
       </ul>
 

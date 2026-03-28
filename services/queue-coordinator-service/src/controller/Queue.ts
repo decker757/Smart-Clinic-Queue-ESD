@@ -106,6 +106,17 @@ router.post("/call-next", async (req: Request, res: Response) => {
     }
 });
 
+// GET /queue/current/:doctor_id — get the currently called patient for a doctor
+router.get("/current/:doctor_id", async (req: Request, res: Response) => {
+    try {
+        const entry = await QueueService.getCurrentCalled(req.params.doctor_id as string);
+        if (!entry) return res.status(404).json({ error: "No current patient" });
+        res.json(entry);
+    } catch {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // POST /queue/reset — reset queue at start of day
 router.post("/reset", async (_req: Request, res: Response) => {
     try {

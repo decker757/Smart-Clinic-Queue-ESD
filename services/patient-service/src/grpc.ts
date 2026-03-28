@@ -22,7 +22,7 @@ function serializePatient(patient: PatientService.Patient) {
     return {
         ...patient,
         phone: patient.phone ?? "",
-        dob: patient.dob ?? "",
+        dob: patient.dob ? new Date(patient.dob as any).toISOString().slice(0, 10) : "",
         nric: patient.nric ?? "",
         gender: patient.gender ?? "",
         allergies: patient.allergies ?? [],
@@ -109,6 +109,7 @@ async function GetMemos(call: any, callback: any) {
                 file_url: m.file_url ?? "",
                 file_type: m.file_type ?? "",
                 issued_by: m.issued_by ?? "",
+                appointment_id: m.appointment_id ?? "",
                 created_at: m.created_at.toISOString(),
             })),
         });
@@ -165,14 +166,15 @@ async function CreateFileMemo(call: any, callback: any) {
 
 async function CreateDoctorRecord(call: any, callback: any) {
     try {
-        const { patient_id, title, content, record_type, issued_by } = call.request;
-        const memo = await MemoService.createDoctorRecord(patient_id, title, content, record_type, issued_by);
+        const { patient_id, title, content, record_type, issued_by, appointment_id } = call.request;
+        const memo = await MemoService.createDoctorRecord(patient_id, title, content, record_type, issued_by, appointment_id || undefined);
         callback(null, {
             ...memo,
             content: memo.content ?? "",
             file_url: memo.file_url ?? "",
             file_type: memo.file_type ?? "",
             issued_by: memo.issued_by ?? "",
+            appointment_id: memo.appointment_id ?? "",
             created_at: memo.created_at.toISOString(),
         });
     } catch (e: any) {

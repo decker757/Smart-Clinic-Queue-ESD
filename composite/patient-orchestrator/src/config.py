@@ -8,5 +8,6 @@ class Settings:
     JWKS_URL: str = os.getenv("JWKS_URL", "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json")
     RABBITMQ_URL: str = os.getenv("RABBITMQ_URL")
     PORT: int = int(os.getenv("PORT"))
+    PAYMENT_SERVICE_URL: str = os.getenv("PAYMENT_SERVICE_URL", "http://payment-service.smart-clinic.local:3008")
 
 settings = Settings()

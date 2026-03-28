@@ -12,6 +12,7 @@ const { signOut } = useAuth()
 const {
   fetchDoctorInfo,
   fetchDoctorSlots,
+  fetchCurrentPatient,
   callNextPatient,
   completeConsultation,
   fetchPatient,
@@ -59,7 +60,10 @@ const greeting = computed(() => {
   return 'Good evening'
 })
 
-const firstName = computed(() => authStore.user?.name?.split(' ')[0] ?? 'Doctor')
+const firstName = computed(() => {
+  const name = (authStore.user?.name ?? '').replace(/^Dr\.\s*/i, '')
+  return name.split(' ')[0] || 'Doctor'
+})
 
 const todaySlots = computed(() => {
   const today = new Date().toDateString()
@@ -93,13 +97,17 @@ async function loadDashboard() {
     const doctorId = authStore.user?.id
     if (!doctorId) return
 
-    const [doctorData, slotsData] = await Promise.all([
+    const [doctorData, slotsData, calledPatient] = await Promise.all([
       fetchDoctorInfo(doctorId),
       fetchDoctorSlots(doctorId),
+      fetchCurrentPatient(doctorId),
     ])
 
     doctor.value = doctorData
     slots.value = slotsData ?? []
+    if (calledPatient && !currentPatient.value) {
+      currentPatient.value = calledPatient
+    }
     error.value = ''
   } catch {
     error.value = 'Could not load dashboard. Please refresh.'
@@ -214,7 +222,7 @@ onUnmounted(() => {
           </span>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-sm text-slate-500 hidden sm:inline">Dr. {{ authStore.user?.name }}</span>
+          <span class="text-sm text-slate-500 hidden sm:inline">Dr. {{ (authStore.user?.name ?? '').replace(/^Dr\.\s*/i, '') }}</span>
           <button
             type="button"
             class="flex items-center gap-1.5 text-sm text-slate-500 hover:text-text transition-colors duration-150 cursor-pointer"
@@ -499,15 +507,7 @@ onUnmounted(() => {
             </svg>
             <p class="text-sm font-semibold text-emerald-700">Consultation completed successfully.</p>
           </div>
-          <div v-if="paymentLink" class="p-4 bg-slate-50 border border-slate-200 rounded-xl">
-            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Payment Link</p>
-            <a
-              :href="paymentLink"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-sm text-primary underline break-all"
-            >{{ paymentLink }}</a>
-          </div>
+          <p class="text-sm text-slate-500">Payment link has been sent to the patient via SMS.</p>
           <AppButton variant="secondary" @click="showConsultationModal = false">Close</AppButton>
         </div>
 

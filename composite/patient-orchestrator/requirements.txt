@@ -7,3 +7,4 @@ PyJWT[crypto]
 grpcio
 grpcio-tools
 python-multipart
+httpx

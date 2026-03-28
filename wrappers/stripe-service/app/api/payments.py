@@ -10,7 +10,27 @@ logger = logging.getLogger(__name__)
 
 stripe.api_key = settings.STRIPE_API_KEY
 
+from pydantic import BaseModel
+from app.services.stripe_service import create_checkout_session
+from app.config.settings import settings as app_settings
+
 router = APIRouter()
+
+
+class CreateSessionRequest(BaseModel):
+    appointment_id: str
+    patient_id: str
+
+
+@router.post("/create-session")
+async def create_session(body: CreateSessionRequest):
+    session = create_checkout_session(
+        amount=app_settings.CONSULTATION_FEE_CENTS,
+        currency=app_settings.CURRENCY,
+        consultation_id=body.appointment_id,
+        patient_id=body.patient_id,
+    )
+    return {"payment_link": session.url, "session_id": session.id}
 
 
 @router.post("/webhook")
