@@ -2,14 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.routes import patient, history, memo, payment
 
-app = FastAPI(title="Patient Orchestrator", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="Patient Orchestrator",
+    version="1.0.0",
+    docs_url="/api/composite/patients/docs",
+    openapi_url="/api/composite/patients/openapi.json",
 )
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(patient.router)
 app.include_router(history.router)

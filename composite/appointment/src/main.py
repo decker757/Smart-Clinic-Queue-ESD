@@ -14,18 +14,17 @@ from src.models.appointment import (
 )
 from src.services import auth, appointment as appointment_service
 
-app = FastAPI(title="Appointment Composite Service", version="1.0.0")
+app = FastAPI(
+    title="Appointment Composite Service",
+    version="1.0.0",
+    docs_url="/api/composite/appointments/docs",
+    openapi_url="/api/composite/appointments/openapi.json",
+)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # In-memory idempotency cache: key → serialised AppointmentResponse dict
 # Prevents duplicate appointment creation when clients retry on network failures.
 _idempotency_cache: dict[str, dict] = {}
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 # ─── Auth dependency ──────────────────────────────────────────────────────────

@@ -127,6 +127,25 @@ seed_doctor "doctor1@clinic.com" "Dr Alice Tan"  "General Practice"
 seed_doctor "doctor2@clinic.com" "Dr Bob Lim"    "Cardiology"
 seed_doctor "doctor3@clinic.com" "Dr Carol Wong" "Paediatrics"
 
+# ── Time slots ────────────────────────────────────────────────────────────────
+echo ""
+echo "━━━ Time Slots ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+db_exec doctors "
+  INSERT INTO time_slots (doctor_id, start_time, end_time, status)
+  SELECT
+    d.id,
+    (gs::date + make_interval(hours => h, mins => m)) AT TIME ZONE 'Asia/Singapore',
+    (gs::date + make_interval(hours => h, mins => m)) AT TIME ZONE 'Asia/Singapore' + INTERVAL '15 minutes',
+    'available'
+  FROM doctors d
+  CROSS JOIN generate_series(CURRENT_DATE + 1, CURRENT_DATE + 31, '1 day'::interval) gs
+  CROSS JOIN unnest(ARRAY[9,10,11,14,15,16]) h
+  CROSS JOIN unnest(ARRAY[0,15,30,45]) m
+  WHERE EXTRACT(DOW FROM gs) != 0
+  ON CONFLICT (doctor_id, start_time) DO NOTHING;
+" > /dev/null
+pass "time_slots seeded (next 30 days, Mon–Sat, 09:00–12:00 + 14:00–17:00 SGT)"
+
 # ── Patients ──────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━ Patients ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

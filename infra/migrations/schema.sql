@@ -147,7 +147,8 @@ CREATE TABLE IF NOT EXISTS doctors.time_slots (
     start_time TIMESTAMPTZ NOT NULL,
     end_time   TIMESTAMPTZ NOT NULL,
     status     VARCHAR(50) DEFAULT 'available',
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_time_slots_doctor_start UNIQUE (doctor_id, start_time)
 );
 
 CREATE TABLE IF NOT EXISTS doctors.consultations (

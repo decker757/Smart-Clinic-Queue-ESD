@@ -12,14 +12,14 @@ async def lifespan(app: FastAPI):
     await rabbitmq.disconnect()
 
 
-app = FastAPI(title="Staff Management Orchestrator", version="1.0.0", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="Staff Management Orchestrator",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/api/composite/staff/docs",
+    openapi_url="/api/composite/staff/openapi.json",
 )
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(doctor.router)
 app.include_router(queue.router)

@@ -90,7 +90,6 @@ function selectDoctor(doctorId) {
   selectedDoctor.value = doctorId
   availableSlots.value = []
   selectedSlot.value = null
-  // If date already chosen, fetch slots for the new doctor immediately
   if (selectedDate.value) fetchSlots()
 }
 
@@ -171,31 +170,66 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 p-6">
-    <div class="max-w-2xl mx-auto">
-      <h1 class="text-2xl font-bold text-gray-900 mb-6">Book an Appointment</h1>
+  <div class="min-h-dvh bg-surface">
+
+    <!-- ─── Header ──────────────────────────────────────────────────────────── -->
+    <header class="sticky top-0 z-20 bg-white border-b border-slate-200">
+      <div class="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
+        <button
+          type="button"
+          class="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-text hover:bg-slate-100 transition-colors duration-150 cursor-pointer"
+          aria-label="Back"
+          @click="router.push('/dashboard')"
+        >
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+        <h1 class="font-heading font-semibold text-text text-base">Book an Appointment</h1>
+      </div>
+    </header>
+
+    <!-- ─── Main ────────────────────────────────────────────────────────────── -->
+    <main class="max-w-2xl mx-auto px-4 py-8 space-y-6">
 
       <!-- Error / Success banners -->
-      <div v-if="error" class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+      <div
+        v-if="error"
+        role="alert"
+        class="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700"
+      >
         {{ error }}
       </div>
-      <div v-if="success" class="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+      <div
+        v-if="success"
+        role="status"
+        class="px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700 flex items-center gap-2"
+      >
+        <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
         {{ success }}
       </div>
 
-      <!-- Mode tabs -->
-      <div class="flex gap-1 mb-8 bg-gray-100 p-1 rounded-lg">
+      <!-- ─── Mode tabs ──────────────────────────────────────────────────────── -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-1 flex gap-1">
         <button
+          type="button"
+          class="flex-1 py-2 px-4 rounded-xl text-sm font-semibold transition-colors duration-150 cursor-pointer"
+          :class="bookingMode === MODE.SESSION
+            ? 'bg-primary/8 text-primary'
+            : 'text-slate-500 hover:text-text'"
           @click="switchMode(MODE.SESSION)"
-          class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition"
-          :class="bookingMode === MODE.SESSION ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'"
         >
           Walk-in (Session)
         </button>
         <button
+          type="button"
+          class="flex-1 py-2 px-4 rounded-xl text-sm font-semibold transition-colors duration-150 cursor-pointer"
+          :class="bookingMode === MODE.DOCTOR
+            ? 'bg-primary/8 text-primary'
+            : 'text-slate-500 hover:text-text'"
           @click="switchMode(MODE.DOCTOR)"
-          class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition"
-          :class="bookingMode === MODE.DOCTOR ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'"
         >
           Book with Doctor
         </button>
@@ -203,90 +237,154 @@ onUnmounted(() => {
 
       <!-- ── Mode A: Walk-in session ── -->
       <div v-if="bookingMode === MODE.SESSION">
-        <section class="mb-8">
-          <h2 class="text-lg font-semibold text-gray-800 mb-3">Choose a Session</h2>
-          <div class="grid grid-cols-2 gap-3">
-            <button
-              @click="selectedSession = SESSION.MORNING"
-              class="p-4 text-left border rounded-lg transition"
-              :class="selectedSession === SESSION.MORNING ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'"
-            >
-              <div class="font-medium text-gray-900">Morning</div>
-              <div class="text-sm text-gray-500">09:00 – 12:00</div>
-            </button>
-            <button
-              @click="selectedSession = SESSION.AFTERNOON"
-              class="p-4 text-left border rounded-lg transition"
-              :class="selectedSession === SESSION.AFTERNOON ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'"
-            >
-              <div class="font-medium text-gray-900">Afternoon</div>
-              <div class="text-sm text-gray-500">14:00 – 17:00</div>
-            </button>
-          </div>
-        </section>
+        <p class="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Choose a Session</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            class="p-5 text-left bg-white border rounded-2xl transition-colors duration-150 cursor-pointer"
+            :class="selectedSession === SESSION.MORNING
+              ? 'border-primary bg-primary/8'
+              : 'border-slate-200 hover:border-primary/40'"
+            @click="selectedSession = SESSION.MORNING"
+          >
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
+              :class="selectedSession === SESSION.MORNING ? 'bg-primary/15' : 'bg-slate-100'">
+              <svg class="w-5 h-5" :class="selectedSession === SESSION.MORNING ? 'text-primary' : 'text-slate-400'"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+              </svg>
+            </div>
+            <div class="font-heading font-semibold text-text text-sm">Morning</div>
+            <div class="text-xs text-slate-500 mt-0.5">09:00 – 12:00</div>
+          </button>
+
+          <button
+            type="button"
+            class="p-5 text-left bg-white border rounded-2xl transition-colors duration-150 cursor-pointer"
+            :class="selectedSession === SESSION.AFTERNOON
+              ? 'border-primary bg-primary/8'
+              : 'border-slate-200 hover:border-primary/40'"
+            @click="selectedSession = SESSION.AFTERNOON"
+          >
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
+              :class="selectedSession === SESSION.AFTERNOON ? 'bg-primary/15' : 'bg-slate-100'">
+              <!-- Sunset / half-sun icon for afternoon -->
+              <svg class="w-5 h-5" :class="selectedSession === SESSION.AFTERNOON ? 'text-primary' : 'text-slate-400'"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <!-- half circle (sun at horizon) -->
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 0 1 15 0" />
+                <!-- horizon line -->
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h18" />
+                <!-- rays above -->
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 2.25V4.5" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18.894 5.106l-1.59 1.59" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5.106 5.106l1.59 1.59" />
+                <!-- glow lines below horizon -->
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 15.75h18" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 19.5h15" />
+              </svg>
+            </div>
+            <div class="font-heading font-semibold text-text text-sm">Afternoon</div>
+            <div class="text-xs text-slate-500 mt-0.5">14:00 – 17:00</div>
+          </button>
+        </div>
       </div>
 
       <!-- ── Mode B: Book with doctor ── -->
-      <div v-else>
+      <div v-else class="space-y-6">
+
         <!-- Step 1: Pick doctor -->
-        <section class="mb-8">
-          <h2 class="text-lg font-semibold text-gray-800 mb-3">1. Select a Doctor</h2>
-          <div v-if="loading && !doctors.length" class="text-gray-500">Loading doctors...</div>
-          <div class="grid gap-3">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">1. Select a Doctor</p>
+          <div v-if="loading && !doctors.length" class="space-y-3">
+            <div v-for="i in 3" :key="i" class="bg-white rounded-2xl border border-slate-200 p-4 animate-pulse">
+              <div class="h-4 w-32 bg-slate-100 rounded mb-2" />
+              <div class="h-3 w-24 bg-slate-100 rounded" />
+            </div>
+          </div>
+          <div class="space-y-2">
             <button
               v-for="doc in doctors"
               :key="doc.id"
+              type="button"
+              class="w-full p-4 text-left bg-white border rounded-2xl transition-colors duration-150 cursor-pointer flex items-center justify-between"
+              :class="selectedDoctor === doc.id
+                ? 'border-primary bg-primary/8'
+                : 'border-slate-200 hover:border-primary/40'"
               @click="selectDoctor(doc.id)"
-              class="p-4 text-left border rounded-lg transition"
-              :class="selectedDoctor === doc.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'"
             >
-              <div class="font-medium text-gray-900">{{ doc.name }}</div>
-              <div class="text-sm text-gray-500">{{ doc.specialisation }}</div>
+              <div>
+                <div class="font-heading font-semibold text-text text-sm">{{ doc.name }}</div>
+                <div class="text-xs text-slate-500 mt-0.5">{{ doc.specialisation }}</div>
+              </div>
+              <!-- Selected checkmark -->
+              <svg
+                v-if="selectedDoctor === doc.id"
+                class="w-5 h-5 text-primary shrink-0"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
             </button>
           </div>
-        </section>
+        </div>
 
         <!-- Step 2: Pick date -->
-        <section v-if="selectedDoctor" class="mb-8">
-          <h2 class="text-lg font-semibold text-gray-800 mb-3">2. Select a Date</h2>
-          <input
-            type="date"
-            v-model="selectedDate"
-            :min="sgtToday()"
-            :max="sgtMaxDate()"
-            @change="fetchSlots"
-            class="w-full p-3 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500"
-          />
-        </section>
+        <div v-if="selectedDoctor">
+          <p class="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">2. Select a Date</p>
+          <div class="bg-white rounded-2xl border border-slate-200 p-4">
+            <input
+              type="date"
+              v-model="selectedDate"
+              :min="sgtToday()"
+              :max="sgtMaxDate()"
+              @change="fetchSlots"
+              class="w-full text-sm text-text bg-transparent focus:outline-none cursor-pointer"
+            />
+          </div>
+        </div>
 
         <!-- Step 3: Pick slot -->
-        <section v-if="selectedDoctor && selectedDate" class="mb-8">
-          <h2 class="text-lg font-semibold text-gray-800 mb-3">3. Choose a Time Slot</h2>
-          <div v-if="slotsLoading" class="text-gray-500">Loading available slots...</div>
-          <div v-else-if="!availableSlots.length" class="text-gray-500">No available slots for this date.</div>
-          <div class="grid grid-cols-3 gap-2">
+        <div v-if="selectedDoctor && selectedDate">
+          <p class="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">3. Choose a Time Slot</p>
+          <div v-if="slotsLoading" class="grid grid-cols-3 gap-2">
+            <div v-for="i in 6" :key="i" class="h-11 bg-white border border-slate-200 rounded-xl animate-pulse" />
+          </div>
+          <p v-else-if="!availableSlots.length" class="text-sm text-slate-500 bg-white rounded-2xl border border-slate-200 px-4 py-3">
+            No available slots for this date.
+          </p>
+          <div v-else class="grid grid-cols-3 gap-2">
             <button
               v-for="slot in availableSlots"
               :key="slot.id"
+              type="button"
+              class="h-11 text-center text-sm font-medium border rounded-xl transition-colors duration-150 cursor-pointer"
+              :class="selectedSlot === slot.id
+                ? 'border-primary bg-primary/8 text-primary font-semibold'
+                : 'bg-white border-slate-200 text-slate-600 hover:border-primary/40'"
               @click="selectedSlot = slot.id"
-              class="p-3 text-center border rounded-lg text-sm transition"
-              :class="selectedSlot === slot.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'"
             >
               {{ formatSlotTime(slot) }}
             </button>
           </div>
-        </section>
+        </div>
+
       </div>
 
-      <!-- Confirm button -->
+      <!-- ─── Confirm button ──────────────────────────────────────────────────── -->
       <button
-        @click="bookAppointment"
+        type="button"
+        class="w-full h-11 rounded-xl font-semibold text-sm transition-colors duration-150 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-cta"
+        :class="canBook
+          ? 'bg-cta text-white hover:bg-cta/90 cursor-pointer'
+          : 'bg-slate-100 text-slate-400 cursor-not-allowed'"
         :disabled="!canBook"
-        class="w-full py-3 rounded-lg font-medium text-white transition"
-        :class="canBook ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'"
+        @click="bookAppointment"
       >
-        {{ loading ? 'Booking...' : 'Confirm Booking' }}
+        {{ loading ? 'Booking…' : 'Confirm Booking' }}
       </button>
-    </div>
+
+    </main>
   </div>
 </template>
