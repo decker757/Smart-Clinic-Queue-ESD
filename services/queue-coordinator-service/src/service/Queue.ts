@@ -221,7 +221,24 @@ export async function deprioritize(appointment_id: string): Promise<QueueEntry> 
         `, [appointment_id]);
         if (!rows[0]) throw new Error("Appointment not in queue");
         await redis.del(cacheKey(appointment_id));
-        return rows[0] as QueueEntry;
+
+        // Compute estimated_time based on new queue position (same logic as getQueuePosition)
+        const entry = rows[0];
+        const { rows: countRows } = await pool.query(`
+            SELECT COUNT(*) AS active_ahead
+            FROM queue.queue_entries a
+            WHERE a.queue_number < $1
+              AND a.status NOT IN ('done', 'cancelled')
+              AND (
+                ($2::text IS NOT NULL AND a.doctor_id = $2)
+                OR
+                ($2::text IS NULL AND a.session = $3 AND a.doctor_id IS NULL)
+              )
+        `, [entry.queue_number, entry.doctor_id, entry.session]);
+        const aheadMinutes = Number(countRows[0]?.active_ahead ?? 0) * 15;
+        entry.estimated_time = new Date(Date.now() + aheadMinutes * 60 * 1000).toISOString();
+
+        return entry as QueueEntry;
     } catch (e) {
         console.error("Error deprioritizing appointment:", e);
         throw e;

@@ -50,6 +50,18 @@ export function useStaff() {
     return res.json()
   }
 
+  async function deprioritizePatient(appointmentId) {
+    const res = await fetch(
+      `${API_BASE}/api/composite/staff/queue/${appointmentId}/deprioritize`,
+      { method: 'PATCH', headers: authHeaders(authStore.jwt) },
+    )
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.detail ?? 'Failed to deprioritize patient')
+    }
+    return res.json()
+  }
+
   async function removeFromQueue(appointmentId) {
     const res = await fetch(
       `${API_BASE}/api/composite/staff/queue/${appointmentId}`,
@@ -96,6 +108,7 @@ export function useStaff() {
     fetchQueuePosition,
     checkInPatient,
     markNoShow,
+    deprioritizePatient,
     removeFromQueue,
     fetchPatient,
     fetchQueue,

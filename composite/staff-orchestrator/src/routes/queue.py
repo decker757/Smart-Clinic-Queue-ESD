@@ -26,6 +26,11 @@ async def remove_from_queue(appointment_id: str, auth: AuthContext = Depends(req
     return await queue_controller.remove_from_queue(appointment_id, token=auth.token)
 
 
+@router.patch("/{appointment_id}/deprioritize")
+async def deprioritize(appointment_id: str, auth: AuthContext = Depends(require_staff)):
+    return await queue_controller.deprioritize(appointment_id)
+
+
 @router.patch("/{appointment_id}/no-show")
 async def mark_no_show(appointment_id: str, auth: AuthContext = Depends(require_staff)):
     return await queue_controller.mark_no_show(appointment_id)

@@ -1,7 +1,7 @@
 import amqp from "amqplib";
 import { AppointmentInfo } from "../model/Queue";
 import * as QueueService from "../service/Queue";
-import { broadcastQueueUpdate } from "../ws/manager";
+import { broadcastQueueUpdate, broadcastAllPatientPositions } from "../ws/manager";
 
 const EXCHANGE = "clinic.events";
 const QUEUE_NAME = "queue-coordinator.appointment-events";
@@ -52,6 +52,7 @@ export async function startConsumer(): Promise<void> {
                 try {
                     const entry = await QueueService.checkIn(content.appointment_id);
                     broadcastQueueUpdate(entry.appointment_id, entry);
+                    broadcastAllPatientPositions().catch(() => {});
                     console.log(`[Queue] Checked in appointment ${content.appointment_id}`);
                 } catch (e: any) {
                     // Already checked in or in a terminal state — safe to ignore
@@ -62,6 +63,7 @@ export async function startConsumer(): Promise<void> {
                 try {
                     const entry = await QueueService.removeFromQueue(content.appointment_id);
                     broadcastQueueUpdate(entry.appointment_id, entry);
+                    broadcastAllPatientPositions().catch(() => {});
                     console.log(`[Queue] Removed appointment ${content.appointment_id} from queue`);
                 } catch (e: any) {
                     // Already removed (e.g. TTL fired after patient already said "No") — safe to ignore
@@ -72,6 +74,7 @@ export async function startConsumer(): Promise<void> {
                 try {
                     const entry = await QueueService.deprioritize(content.appointment_id);
                     broadcastQueueUpdate(entry.appointment_id, entry);
+                    broadcastAllPatientPositions().catch(() => {});
                     console.log(`[Queue] Deprioritized appointment ${content.appointment_id}`);
                 } catch (e: any) {
                     console.warn(`[Queue] deprioritize skipped for ${content.appointment_id}: ${e.message}`);
@@ -81,6 +84,7 @@ export async function startConsumer(): Promise<void> {
                 try {
                     const entry = await QueueService.completeAppointment(content.appointment_id);
                     broadcastQueueUpdate(entry.appointment_id, entry);
+                    broadcastAllPatientPositions().catch(() => {});
                     console.log(`[Queue] Marked appointment ${content.appointment_id} as done`);
                 } catch (e: any) {
                     if (e.message === "Appointment not found or cannot be completed") {
@@ -92,7 +96,9 @@ export async function startConsumer(): Promise<void> {
 
             } else if (routingKey === "appointment.cancelled") {
                 try {
-                    await QueueService.removeFromQueue(content.appointment_id);
+                    const entry = await QueueService.removeFromQueue(content.appointment_id);
+                    broadcastQueueUpdate(entry.appointment_id, entry);
+                    broadcastAllPatientPositions().catch(() => {});
                     console.log(`[Queue] Removed appointment ${content.appointment_id} from queue`);
                 } catch (e: any) {
                     if (e.message === "Appointment not in queue") {

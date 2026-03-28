@@ -105,6 +105,17 @@ async def complete_appointment(appointment_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+async def deprioritize(appointment_id: str):
+    async with httpx.AsyncClient() as client:
+        res = await client.post(f"{settings.QUEUE_SERVICE_URL}/api/queue/deprioritize/{appointment_id}")
+        if res.status_code == 404:
+            raise HTTPException(status_code=404, detail="Appointment not found in queue")
+        if not res.is_success:
+            raise HTTPException(status_code=502, detail="Failed to deprioritize patient")
+    await rabbitmq.publish_event("staff.patient_deprioritized", {"appointment_id": appointment_id})
+    return res.json()
+
+
 async def get_current_patient(doctor_id: str):
     async with httpx.AsyncClient() as client:
         res = await client.get(f"{settings.QUEUE_SERVICE_URL}/api/queue/current/{doctor_id}")

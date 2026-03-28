@@ -194,7 +194,10 @@ async function handleOnMyWayConfirm() {
       showOnMyWayModal.value = false
       showLateModal.value = true
     } else {
-      // checked_in — WS will push the queue update; just close
+      // checked_in — optimistically update status immediately, WS will confirm
+      if (appointment.value) {
+        appointment.value = { ...appointment.value, status: 'checked_in' }
+      }
       closeModals()
     }
   } catch (e) {

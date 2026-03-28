@@ -2,7 +2,6 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage, Server } from "http";
 import pool from "../db/db";
 import { decodeJwtPayload } from "../utils/jwt";
-import { listActiveQueue } from "../service/Queue";
 
 // Map of appointment_id → set of connected WebSocket clients (patients)
 const subscriptions = new Map<string, Set<WebSocket>>();
@@ -17,6 +16,18 @@ const STAFF_ROLES = new Set(["staff", "doctor", "admin"]);
 // socket with 400 if the path doesn't match, preventing the second WSS from handling it.
 const patientWss = new WebSocketServer({ noServer: true });
 const staffWss   = new WebSocketServer({ noServer: true });
+
+// Ping all connected clients every 30s to keep ALB idle connections alive (ALB default timeout = 60s)
+setInterval(() => {
+    for (const clients of subscriptions.values()) {
+        for (const ws of clients) {
+            if (ws.readyState === WebSocket.OPEN) ws.ping();
+        }
+    }
+    for (const ws of staffClients) {
+        if (ws.readyState === WebSocket.OPEN) ws.ping();
+    }
+}, 30_000);
 
 patientWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     try {
@@ -58,6 +69,35 @@ patientWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         subscriptions.get(appointmentId)!.add(ws);
         console.log(`[WS] Client subscribed to appointment ${appointmentId}`);
 
+        // Send current status immediately so reconnects get fresh state without waiting for next event
+        try {
+            const { rows } = await pool.query(`
+                SELECT e.*,
+                    (SELECT COUNT(*) FROM queue.queue_entries a
+                     WHERE a.queue_number < e.queue_number
+                       AND a.status NOT IN ('done', 'cancelled')
+                       AND (
+                         (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
+                         OR
+                         (e.doctor_id IS NULL AND a.session = e.session AND a.doctor_id IS NULL)
+                       )
+                    ) AS active_ahead
+                FROM queue.queue_entries e
+                WHERE e.appointment_id = $1
+                  AND e.status NOT IN ('done', 'cancelled')
+            `, [appointmentId]);
+            if (rows[0]) {
+                const row = rows[0];
+                if (!row.estimated_time) {
+                    const aheadMinutes = Number(row.active_ahead) * 15;
+                    row.estimated_time = new Date(Date.now() + aheadMinutes * 60 * 1000).toISOString();
+                }
+                ws.send(JSON.stringify(row));
+            }
+        } catch (e) {
+            console.warn(`[WS] Failed to send initial status for ${appointmentId}:`, e);
+        }
+
         ws.on("close", () => {
             subscriptions.get(appointmentId)?.delete(ws);
             if (subscriptions.get(appointmentId)?.size === 0) {
@@ -93,7 +133,7 @@ staffWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         staffClients.add(ws);
 
         try {
-            const entries = await listActiveQueue();
+            const entries = await getActiveQueueWithEta();
             ws.send(JSON.stringify({ type: "snapshot", entries }));
         } catch (e) {
             console.error("[WS:staff] Failed to send snapshot:", e);
@@ -148,6 +188,62 @@ export function broadcastQueueUpdate(appointmentId: string, data: object): void 
 
     if (staffClients.size > 0) {
         const staffPayload = JSON.stringify({ type: "update", entry: data });
+        for (const ws of staffClients) {
+            if (ws.readyState === WebSocket.OPEN) ws.send(staffPayload);
+        }
+    }
+}
+
+/**
+ * Fetch all active queue entries with computed estimated_time.
+ * Used for both the initial staff snapshot and post-mutation broadcasts.
+ */
+async function getActiveQueueWithEta() {
+    const { rows } = await pool.query(`
+        SELECT e.*,
+            (SELECT COUNT(*) FROM queue.queue_entries a
+             WHERE a.queue_number < e.queue_number
+               AND a.status NOT IN ('done', 'cancelled')
+               AND (
+                 (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
+                 OR
+                 (e.doctor_id IS NULL AND a.session = e.session AND a.doctor_id IS NULL)
+               )
+            ) AS active_ahead
+        FROM queue.queue_entries e
+        WHERE e.status NOT IN ('done', 'cancelled')
+        ORDER BY e.queue_number ASC
+    `);
+    for (const row of rows) {
+        if (!row.estimated_time) {
+            const aheadMinutes = Number(row.active_ahead) * 15;
+            row.estimated_time = new Date(Date.now() + aheadMinutes * 60 * 1000).toISOString();
+        }
+    }
+    return rows;
+}
+
+/**
+ * Re-compute and broadcast updated queue positions to all subscribed patients
+ * and push a fresh snapshot to all staff clients.
+ * Call this after any mutation that changes relative ordering.
+ */
+export async function broadcastAllPatientPositions(): Promise<void> {
+    const rows = await getActiveQueueWithEta();
+
+    // Push individual updates to subscribed patients
+    for (const row of rows) {
+        const clients = subscriptions.get(row.appointment_id);
+        if (!clients || clients.size === 0) continue;
+        const payload = JSON.stringify(row);
+        for (const ws of clients) {
+            if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+        }
+    }
+
+    // Push fresh snapshot to all staff clients so their list re-sorts
+    if (staffClients.size > 0) {
+        const staffPayload = JSON.stringify({ type: "snapshot", entries: rows });
         for (const ws of staffClients) {
             if (ws.readyState === WebSocket.OPEN) ws.send(staffPayload);
         }

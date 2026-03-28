@@ -14,6 +14,7 @@ const { signOut } = useAuth()
 const {
   checkInPatient,
   markNoShow,
+  deprioritizePatient,
   removeFromQueue,
   fetchPatient,
   fetchDoctors,
@@ -55,15 +56,27 @@ const queueStats = computed(() => ({
 }))
 
 const STATUS_BADGE = {
-  waiting:    { label: 'Waiting',    classes: 'bg-amber-100 text-amber-700' },
-  checked_in: { label: 'Checked In', classes: 'bg-emerald-100 text-emerald-700' },
-  called:     { label: 'Called',     classes: 'bg-primary/10 text-primary' },
-  no_show:    { label: 'No Show',    classes: 'bg-red-100 text-red-600' },
-  completed:  { label: 'Completed',  classes: 'bg-slate-100 text-slate-500' },
+  waiting:    { label: 'Waiting',    classes: 'bg-amber-100 text-amber-700',   accent: 'bg-amber-400' },
+  checked_in: { label: 'Checked In', classes: 'bg-emerald-100 text-emerald-700', accent: 'bg-emerald-400' },
+  called:     { label: 'Called',     classes: 'bg-primary/10 text-primary',    accent: 'bg-primary' },
+  no_show:    { label: 'No Show',    classes: 'bg-red-100 text-red-600',       accent: 'bg-red-400' },
+  completed:  { label: 'Completed',  classes: 'bg-slate-100 text-slate-500',   accent: 'bg-slate-300' },
 }
 
 function statusBadge(status) {
-  return STATUS_BADGE[status] ?? { label: status, classes: 'bg-slate-100 text-slate-500' }
+  return STATUS_BADGE[status] ?? { label: status, classes: 'bg-slate-100 text-slate-500', accent: 'bg-slate-300' }
+}
+
+function etaMinutes(entry) {
+  // Use server-computed estimated_time if available; otherwise derive from local queue state
+  if (entry.estimated_time) {
+    const diff = new Date(entry.estimated_time) - Date.now()
+    return diff > 0 ? Math.round(diff / 60000) : 0
+  }
+  const activeAhead = queue.value.filter(
+    (e) => e.queue_number < entry.queue_number && !['done', 'cancelled'].includes(e.status),
+  ).length
+  return activeAhead * 15
 }
 
 // ─── Data loading ─────────────────────────────────────────────────────────────
@@ -76,7 +89,7 @@ async function loadDoctors() {
 }
 
 function connectQueueSocket() {
-  loading.value = true
+  if (queue.value.length === 0) loading.value = true
   const url = `${wsBase()}/api/queue/ws/staff?token=${authStore.jwt}`
   const ws = new WebSocket(url)
 
@@ -144,9 +157,10 @@ async function handleQueueAction(appointmentId, action, successMsg, newStatus) {
   }
 }
 
-const handleCheckIn = (id) => handleQueueAction(id, checkInPatient,  'Patient checked in successfully!', 'checked_in')
-const handleNoShow  = (id) => handleQueueAction(id, markNoShow,       'Patient marked as no-show.',       'no_show')
-const handleRemove  = (id) => handleQueueAction(id, removeFromQueue,  'Patient removed from queue.',      null)
+const handleCheckIn     = (id) => handleQueueAction(id, checkInPatient,     'Patient checked in successfully!', 'checked_in')
+const handleNoShow      = (id) => handleQueueAction(id, markNoShow,          'Patient marked as no-show.',       'no_show')
+const handleDeprioritize = (id) => handleQueueAction(id, deprioritizePatient, 'Patient moved to back of queue.',  'waiting')
+const handleRemove      = (id) => handleQueueAction(id, removeFromQueue,     'Patient removed from queue.',      null)
 
 async function handleViewPatient(patientId) {
   if (!patientId) return
@@ -298,83 +312,122 @@ onUnmounted(() => {
           <div
             v-for="entry in queue"
             :key="entry.appointment_id"
-            class="bg-white rounded-2xl border border-slate-200 px-5 py-4"
+            class="bg-white rounded-2xl border border-slate-200 overflow-hidden"
           >
-            <div class="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <p class="font-semibold text-sm text-text">
-                  Queue #{{ entry.queue_number }}
-                </p>
-                <p class="text-xs text-slate-500 mt-0.5">
-                  Appt: {{ entry.appointment_id }}
-                </p>
-                <p v-if="entry.estimated_time" class="text-xs text-slate-400 mt-0.5">
-                  ETA: {{ entry.estimated_time }}
-                </p>
+            <div class="flex">
+              <!-- Status accent bar -->
+              <div class="w-1 shrink-0" :class="statusBadge(entry.status).accent" />
+
+              <div class="flex-1 px-5 py-4">
+                <!-- Top row -->
+                <div class="flex items-start justify-between gap-4">
+                  <!-- Left: queue number + short ID -->
+                  <div>
+                    <p class="font-heading font-bold text-2xl text-text leading-none tabular-nums">
+                      #{{ entry.queue_number }}
+                    </p>
+                    <p class="text-xs text-slate-400 mt-1 font-mono tracking-wide">
+                      {{ entry.appointment_id.slice(0, 8).toUpperCase() }}
+                    </p>
+                  </div>
+
+                  <!-- Right: ETA pill + status badge -->
+                  <div class="shrink-0 flex items-center gap-2">
+                    <span
+                      v-if="entry.status === 'checked_in'"
+                      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500 text-white text-xs font-bold tabular-nums"
+                    >
+                      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                      </svg>
+                      {{ etaMinutes(entry) }} min
+                    </span>
+                    <span
+                      class="text-xs font-semibold px-2.5 py-1 rounded-full"
+                      :class="statusBadge(entry.status).classes"
+                    >
+                      {{ statusBadge(entry.status).label }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-100">
+                  <!-- Primary actions -->
+                  <div class="flex flex-wrap gap-2">
+                    <!-- Check In -->
+                    <button
+                      v-if="entry.status === 'waiting'"
+                      type="button"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                      :disabled="actionLoadingId === entry.appointment_id"
+                      @click="handleCheckIn(entry.appointment_id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                      </svg>
+                      Check In
+                    </button>
+
+                    <!-- View Patient -->
+                    <button
+                      v-if="entry.patient_id"
+                      type="button"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors duration-150 cursor-pointer"
+                      @click="handleViewPatient(entry.patient_id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                      </svg>
+                      Patient
+                    </button>
+
+                    <!-- Deprioritize -->
+                    <button
+                      v-if="entry.status === 'waiting' || entry.status === 'checked_in'"
+                      type="button"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                      :disabled="actionLoadingId === entry.appointment_id"
+                      @click="handleDeprioritize(entry.appointment_id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0-3.75-3.75M17.25 21 21 17.25" />
+                      </svg>
+                      Deprioritize
+                    </button>
+                  </div>
+
+                  <!-- Destructive actions -->
+                  <div class="flex gap-2">
+                    <!-- No Show -->
+                    <button
+                      v-if="entry.status === 'waiting' || entry.status === 'checked_in'"
+                      type="button"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-amber-600 hover:bg-amber-50 transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                      :disabled="actionLoadingId === entry.appointment_id"
+                      @click="handleNoShow(entry.appointment_id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                      </svg>
+                      No Show
+                    </button>
+
+                    <!-- Remove -->
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-red-500 hover:bg-red-50 transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                      :disabled="actionLoadingId === entry.appointment_id"
+                      @click="handleRemove(entry.appointment_id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                      </svg>
+                      Remove
+                    </button>
+                  </div>
+                </div>
               </div>
-              <span
-                class="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full"
-                :class="statusBadge(entry.status).classes"
-              >
-                {{ statusBadge(entry.status).label }}
-              </span>
-            </div>
-
-            <!-- Action buttons -->
-            <div class="flex flex-wrap gap-2">
-              <!-- Check In -->
-              <button
-                v-if="entry.status === 'waiting'"
-                type="button"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50"
-                :disabled="actionLoadingId === entry.appointment_id"
-                @click="handleCheckIn(entry.appointment_id)"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                </svg>
-                Check In
-              </button>
-
-              <!-- View Patient -->
-              <button
-                v-if="entry.patient_id"
-                type="button"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary/8 text-primary hover:bg-primary/12 transition-colors cursor-pointer"
-                @click="handleViewPatient(entry.patient_id)"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                </svg>
-                View Patient
-              </button>
-
-              <!-- No Show -->
-              <button
-                v-if="entry.status === 'waiting' || entry.status === 'checked_in'"
-                type="button"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-50"
-                :disabled="actionLoadingId === entry.appointment_id"
-                @click="handleNoShow(entry.appointment_id)"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-                </svg>
-                No Show
-              </button>
-
-              <!-- Remove -->
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors cursor-pointer disabled:opacity-50"
-                :disabled="actionLoadingId === entry.appointment_id"
-                @click="handleRemove(entry.appointment_id)"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                </svg>
-                Remove
-              </button>
             </div>
           </div>
         </div>

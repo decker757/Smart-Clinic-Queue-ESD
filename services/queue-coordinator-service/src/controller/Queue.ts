@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import * as QueueService from "../service/Queue";
-import { broadcastQueueUpdate } from "../ws/manager";
+import { broadcastQueueUpdate, broadcastAllPatientPositions } from "../ws/manager";
 import { callerIdFromAuthHeader } from "../utils/jwt";
 
 const router = Router();
@@ -41,6 +41,7 @@ router.post("/checkin/:appointment_id", async (req: Request, res: Response) => {
         const entry = await QueueService.checkIn(appointment_id, callerId);
         broadcastQueueUpdate(appointment_id, entry);
         res.json(entry);
+        broadcastAllPatientPositions().catch(() => {});
     } catch (e: any) {
         if (e.message === "Appointment not in queue") {
             res.status(404).json({ error: e.message });
@@ -61,6 +62,7 @@ router.post("/no-show/:appointment_id", async (req: Request, res: Response) => {
         const entry = await QueueService.markNoShow(appointment_id);
         broadcastQueueUpdate(appointment_id, entry);
         res.json(entry);
+        broadcastAllPatientPositions().catch(() => {});
     } catch (e: any) {
         if (e.message === "Appointment not found or already resolved") {
             res.status(404).json({ error: e.message });
@@ -77,6 +79,7 @@ router.post("/complete/:appointment_id", async (req: Request, res: Response) => 
         const entry = await QueueService.completeAppointment(appointment_id);
         broadcastQueueUpdate(appointment_id, entry);
         res.json(entry);
+        broadcastAllPatientPositions().catch(() => {});
     } catch (e: any) {
         if (e.message === "Appointment not found or cannot be completed") {
             res.status(404).json({ error: e.message });
@@ -97,6 +100,7 @@ router.post("/call-next", async (req: Request, res: Response) => {
         const next = await QueueService.callNext(session, doctor_id);
         broadcastQueueUpdate(next.appointment_id, next);
         res.json(next);
+        broadcastAllPatientPositions().catch(() => {});
     } catch (e: any) {
         if (e.message === "No waiting patients in queue") {
             res.status(404).json({ error: e.message });
@@ -114,6 +118,23 @@ router.get("/current/:doctor_id", async (req: Request, res: Response) => {
         res.json(entry);
     } catch {
         res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// POST /queue/deprioritize/:appointment_id — move patient to back of queue
+router.post("/deprioritize/:appointment_id", async (req: Request, res: Response) => {
+    try {
+        const appointment_id = req.params.appointment_id as string;
+        const entry = await QueueService.deprioritize(appointment_id);
+        broadcastQueueUpdate(appointment_id, entry);
+        res.json(entry);
+        broadcastAllPatientPositions().catch(() => {});
+    } catch (e: any) {
+        if (e.message === "Appointment not in queue") {
+            res.status(404).json({ error: e.message });
+        } else {
+            res.status(500).json({ error: "Internal server error" });
+        }
     }
 });
 
