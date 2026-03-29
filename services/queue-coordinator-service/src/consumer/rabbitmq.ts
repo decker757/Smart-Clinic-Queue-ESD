@@ -2,6 +2,7 @@ import amqp from "amqplib";
 import { AppointmentInfo } from "../model/Queue";
 import * as QueueService from "../service/Queue";
 import { broadcastQueueUpdate, broadcastAllPatientPositions } from "../ws/manager";
+import { initPublisher } from "../messaging/publisher";
 
 const EXCHANGE = "clinic.events";
 const QUEUE_NAME = "queue-coordinator.appointment-events";
@@ -21,6 +22,9 @@ export async function startConsumer(): Promise<void> {
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.checked_in");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.removed");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.deprioritized");
+    await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.checkin_timeout");
+
+    await initPublisher();
 
     channel.consume(QUEUE_NAME, async (msg) => {
         if (!msg) return;
@@ -92,6 +96,20 @@ export async function startConsumer(): Promise<void> {
                     } else {
                         throw e;
                     }
+                }
+
+            } else if (routingKey === "queue.checkin_timeout") {
+                try {
+                    const entry = await QueueService.removeIfWaiting(content.appointment_id);
+                    if (entry) {
+                        broadcastQueueUpdate(entry.appointment_id, entry);
+                        broadcastAllPatientPositions().catch(() => {});
+                        console.log(`[Queue] Auto-removed no-show ${content.appointment_id} after check-in timeout`);
+                    } else {
+                        console.log(`[Queue] checkin_timeout for ${content.appointment_id} — already checked in, ignoring`);
+                    }
+                } catch (e: any) {
+                    console.warn(`[Queue] checkin_timeout skipped for ${content.appointment_id}: ${e.message}`);
                 }
 
             } else if (routingKey === "appointment.cancelled") {

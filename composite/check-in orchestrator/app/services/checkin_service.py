@@ -12,7 +12,7 @@ async def process_check_in(body):
     now = datetime.now(timezone.utc)
     arrival_time = now + timedelta(minutes=eta_minutes)
 
-    if arrival_time <= body.appointment_time:
+    if body.appointment_time is None or arrival_time <= body.appointment_time:
         # Patient is on time
         await publish_event("queue.checked_in", {
             "patient_id": body.patient_id,

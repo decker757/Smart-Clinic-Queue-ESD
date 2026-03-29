@@ -56,9 +56,10 @@ CREATE TABLE IF NOT EXISTS queue.queue_entries (
     queue_number   INT         NOT NULL,
     status         TEXT        NOT NULL DEFAULT 'waiting'
                                CHECK (status IN ('waiting', 'checked_in', 'called', 'in_progress', 'done', 'skipped', 'cancelled')),
-    estimated_time TIMESTAMPTZ,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    estimated_time           TIMESTAMPTZ,
+    approaching_notified_at  TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE SEQUENCE IF NOT EXISTS queue.queue_number_morning_seq START 1;

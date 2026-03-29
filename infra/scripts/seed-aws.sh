@@ -123,9 +123,9 @@ seed_doctor() {
   echo "  email: $EMAIL | password: $PASSWORD | specialisation: $SPEC | sub: $ID"
 }
 
-seed_doctor "doctor1@clinic.com" "Dr Alice Tan"  "General Practice"
-seed_doctor "doctor2@clinic.com" "Dr Bob Lim"    "Cardiology"
-seed_doctor "doctor3@clinic.com" "Dr Carol Wong" "Paediatrics"
+seed_doctor "doctor1@clinic.com" "Alice Tan"  "General Practice"
+seed_doctor "doctor2@clinic.com" "Bob Lim"    "Cardiology"
+seed_doctor "doctor3@clinic.com" "Carol Wong" "Paediatrics"
 
 # ── Time slots ────────────────────────────────────────────────────────────────
 echo ""
@@ -134,14 +134,18 @@ db_exec doctors "
   INSERT INTO time_slots (doctor_id, start_time, end_time, status)
   SELECT
     d.id,
-    (gs::date + make_interval(hours => h, mins => m)) AT TIME ZONE 'Asia/Singapore',
-    (gs::date + make_interval(hours => h, mins => m)) AT TIME ZONE 'Asia/Singapore' + INTERVAL '15 minutes',
+    slot_start,
+    slot_start + INTERVAL '15 minutes',
     'available'
   FROM doctors d
-  CROSS JOIN generate_series(CURRENT_DATE + 1, CURRENT_DATE + 31, '1 day'::interval) gs
-  CROSS JOIN unnest(ARRAY[9,10,11,14,15,16]) h
-  CROSS JOIN unnest(ARRAY[0,15,30,45]) m
-  WHERE EXTRACT(DOW FROM gs) != 0
+  CROSS JOIN generate_series(
+    (CURRENT_DATE + 1 + make_interval(hours => 9)) AT TIME ZONE 'Asia/Singapore',
+    (CURRENT_DATE + 31 + make_interval(hours => 16, mins => 45)) AT TIME ZONE 'Asia/Singapore',
+    INTERVAL '15 minutes'
+  ) AS slot_start
+  WHERE EXTRACT(DOW FROM slot_start AT TIME ZONE 'Asia/Singapore') != 0
+    AND EXTRACT(HOUR FROM slot_start AT TIME ZONE 'Asia/Singapore') BETWEEN 9 AND 16
+    AND NOT (EXTRACT(HOUR FROM slot_start AT TIME ZONE 'Asia/Singapore') = 13)
   ON CONFLICT (doctor_id, start_time) DO NOTHING;
 " > /dev/null
 pass "time_slots seeded (next 30 days, Mon–Sat, 09:00–12:00 + 14:00–17:00 SGT)"

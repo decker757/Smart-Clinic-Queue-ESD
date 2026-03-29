@@ -2,6 +2,10 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage, Server } from "http";
 import pool from "../db/db";
 import { decodeJwtPayload } from "../utils/jwt";
+import { markApproachingNotified } from "../service/Queue";
+import { publishApproaching, publishApproachingWithTtl } from "../messaging/publisher";
+
+const NOTIFY_THRESHOLD = 3; // notify when this many patients are ahead
 
 // Map of appointment_id → set of connected WebSocket clients (patients)
 const subscriptions = new Map<string, Set<WebSocket>>();
@@ -209,7 +213,8 @@ async function getActiveQueueWithEta() {
                  OR
                  (e.doctor_id IS NULL AND a.session = e.session AND a.doctor_id IS NULL)
                )
-            ) AS active_ahead
+            ) AS active_ahead,
+            e.approaching_notified_at
         FROM queue.queue_entries e
         WHERE e.status NOT IN ('done', 'cancelled')
         ORDER BY e.queue_number ASC
@@ -246,6 +251,26 @@ export async function broadcastAllPatientPositions(): Promise<void> {
         const staffPayload = JSON.stringify({ type: "snapshot", entries: rows });
         for (const ws of staffClients) {
             if (ws.readyState === WebSocket.OPEN) ws.send(staffPayload);
+        }
+    }
+
+    // Notify waiting generic-queue patients who are within NOTIFY_THRESHOLD positions.
+    // Fire-and-forget: failures here must not break the broadcast.
+    for (const row of rows) {
+        if (
+            row.status === "waiting" &&
+            row.session !== null &&          // generic queue only (no specific doctor slot)
+            row.approaching_notified_at === null &&
+            Number(row.active_ahead) <= NOTIFY_THRESHOLD
+        ) {
+            markApproachingNotified(row.appointment_id).then(() => {
+                const payload = {
+                    patient_id: row.patient_id,
+                    appointment_id: row.appointment_id,
+                };
+                publishApproaching(payload);
+                publishApproachingWithTtl(payload);
+            }).catch((e) => console.error("[Approaching] Failed to notify:", e));
         }
     }
 }

@@ -210,7 +210,7 @@ export async function deprioritize(appointment_id: string): Promise<QueueEntry> 
     try {
         const { rows } = await pool.query(`
             UPDATE queue.queue_entries
-            SET status = 'waiting',
+            SET status = 'checked_in',
                 queue_number = CASE session
                     WHEN 'afternoon' THEN NEXTVAL('queue.queue_number_afternoon_seq')
                     ELSE NEXTVAL('queue.queue_number_morning_seq')
@@ -315,6 +315,26 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
         console.error("Error calling next patient:", e);
         throw e;
     }
+}
+
+// Mark that we've sent the "approaching" notification so we don't re-fire on the next tick.
+export async function markApproachingNotified(appointment_id: string): Promise<void> {
+    await pool.query(`
+        UPDATE queue.queue_entries
+        SET approaching_notified_at = NOW()
+        WHERE appointment_id = $1 AND status = 'waiting' AND approaching_notified_at IS NULL
+    `, [appointment_id]);
+}
+
+// Remove a patient only if they're still waiting (haven't checked in during the TTL window).
+export async function removeIfWaiting(appointment_id: string): Promise<QueueEntry | null> {
+    const { rows } = await pool.query(`
+        UPDATE queue.queue_entries SET status = 'cancelled', updated_at = NOW()
+        WHERE appointment_id = $1 AND status = 'waiting'
+        RETURNING *
+    `, [appointment_id]);
+    if (rows[0]) await redis.del(cacheKey(appointment_id));
+    return rows[0] ?? null;
 }
 
 export async function listActiveQueue(): Promise<QueueEntry[]> {

@@ -11,6 +11,7 @@ const HANDLERS: Record<string, (payload: any) => Promise<void>> = {
     "appointment.booked":    AppointmentHandlers.handleAppointmentBooked,
     "appointment.cancelled": AppointmentHandlers.handleAppointmentCancelled,
     "appointment.created":   AppointmentHandlers.handleAppointmentCreated,
+    "queue.approaching":     QueueHandlers.handleApproaching,
     "queue.checked_in":      QueueHandlers.handleCheckedIn,
     "queue.late_detected":   QueueHandlers.handleLateDetected,
     "queue.deprioritized":   QueueHandlers.handleDeprioritized,
