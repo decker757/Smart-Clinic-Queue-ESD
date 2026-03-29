@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
-import activityLogRouter from "./controller/ActivityLog";
 import { startConsumer } from "./consumer/rabbitmq";
 
 const app = express();
@@ -22,7 +21,6 @@ app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", service: "activity-log-service" });
 });
 
-app.use("/api/activity-log", activityLogRouter);
 
 const PORT = parseInt(process.env.PORT || "3005");
 
