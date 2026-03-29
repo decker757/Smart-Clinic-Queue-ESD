@@ -142,7 +142,7 @@
         "tags": [
           "Appointments"
         ],
-        "description": "Provide either 'session' (morning/afternoon) for generic booking, or 'start_time' + 'doctor_id' for a specific slot.",
+        "description": "Provide either 'session' (morning/afternoon) for a generic queue booking (no doctor assigned at booking time), or 'start_time' + 'doctor_id' for a specific doctor slot. Specific doctor slots are capped at 1 patient per 15-minute interval (slot_capacity=1). Returns 409 if the slot is already taken.",
         "requestBody": {
           "required": true,
           "content": {
@@ -197,7 +197,7 @@
             "description": "Validation error"
           },
           "409": {
-            "description": "Slot full for this doctor"
+            "description": "Slot already taken — this doctor already has a booking at this exact 15-minute start_time"
           }
         }
       }
