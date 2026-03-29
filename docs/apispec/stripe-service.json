@@ -42,7 +42,7 @@
     "/api/payments/webhook": {
       "post": {
         "summary": "Stripe Webhook Handler",
-        "description": "Receives raw Stripe webhook events. Validates the `Stripe-Signature` header against `STRIPE_WEBHOOK_SIGNING_SECRET`. On `checkout.session.completed`, publishes `payment.completed` to the `clinic.events` exchange. On `payment_intent.payment_failed`, publishes `payment.failed`.",
+        "description": "Receives raw Stripe webhook events. The body is read as raw bytes (not parsed) so that Stripe's HMAC signature verification succeeds — do not pre-parse the payload. Validates the `Stripe-Signature` header against `STRIPE_WEBHOOK_SIGNING_SECRET`. On `checkout.session.completed`, publishes `payment.completed` to the `clinic.events` exchange. On `payment_intent.payment_failed`, publishes `payment.failed`.",
         "tags": ["Payments"],
         "parameters": [
           {

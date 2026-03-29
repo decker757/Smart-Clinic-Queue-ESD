@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Smart Clinic Queue — API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css" />
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #topbar {
+      background: #1b1b1b;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    #topbar label { color: #fff; font-size: 14px; }
+    #topbar select {
+      padding: 6px 12px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <label for="spec-select">Service:</label>
+    <select id="spec-select">
+      <option value="apispec/appointment-composite.json">Appointment Composite</option>
+      <option value="apispec/appointment-service.json">Appointment Service</option>
+      <option value="apispec/auth-service.json">Auth Service</option>
+      <option value="apispec/checkin-orchestrator.json">Check-in Orchestrator</option>
+      <option value="apispec/consultation-composite.json">Consultation Composite</option>
+      <option value="apispec/doctor-service.json">Doctor Service</option>
+      <option value="apispec/eta-service.json">ETA Service</option>
+      <option value="apispec/patient-orchestrator.json">Patient Orchestrator</option>
+      <option value="apispec/patient-service.json">Patient Service</option>
+      <option value="apispec/payment-service.json">Payment Service</option>
+      <option value="apispec/queue-coordinator.json">Queue Coordinator</option>
+      <option value="apispec/staff-orchestrator.json">Staff Orchestrator</option>
+      <option value="apispec/stripe-service.json">Stripe Service</option>
+    </select>
+  </div>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
+  <script>
+    function loadSpec(url) {
+      SwaggerUIBundle({
+        url,
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+        layout: 'BaseLayout',
+        deepLinking: true,
+      })
+    }
+
+    const select = document.getElementById('spec-select')
+    loadSpec(select.value)
+    select.addEventListener('change', () => loadSpec(select.value))
+  </script>
+</body>
+</html>
