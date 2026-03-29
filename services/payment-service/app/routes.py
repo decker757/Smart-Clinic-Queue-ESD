@@ -1,5 +1,6 @@
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from app.auth import require_auth
 from app.db import get_pool
 from app.config import settings
 
@@ -7,7 +8,7 @@ router = APIRouter(prefix="/api/payments")
 
 
 @router.get("/consultation/{consultation_id}")
-async def get_payment_history(consultation_id: str):
+async def get_payment_history(consultation_id: str, caller_id: str = Depends(require_auth)):
     """Return all payment attempts for a consultation, newest first."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -26,7 +27,7 @@ async def get_payment_history(consultation_id: str):
 
 
 @router.post("/consultation/{consultation_id}/refresh")
-async def refresh_payment_link(consultation_id: str):
+async def refresh_payment_link(consultation_id: str, caller_id: str = Depends(require_auth)):
     """Create a new Stripe checkout session and update the stored payment_link."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -63,7 +64,7 @@ async def refresh_payment_link(consultation_id: str):
     return {"payment_link": new_link}
 
 @router.get("/patient/{patient_id}")
-async def get_patient_payment_history(patient_id: str):
+async def get_patient_payment_history(patient_id: str, caller_id: str = Depends(require_auth)):
     """Return all payment attempts for a patient, newest first."""
     pool = await get_pool()
     async with pool.acquire() as conn:

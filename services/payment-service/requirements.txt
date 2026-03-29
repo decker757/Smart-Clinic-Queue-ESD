@@ -4,3 +4,4 @@ aio-pika
 asyncpg
 httpx
 pydantic-settings
+PyJWT[crypto]

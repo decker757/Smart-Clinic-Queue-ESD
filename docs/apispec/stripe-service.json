@@ -11,6 +11,7 @@
         "summary": "Create Stripe Checkout Session",
         "description": "Creates a Stripe Checkout session for a consultation and returns the hosted payment URL. The consultation fee amount and currency are read from service environment variables.",
         "tags": ["Payments"],
+        "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
           "content": {
@@ -85,6 +86,13 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
     "schemas": {
       "CreateSessionRequest": {
         "type": "object",

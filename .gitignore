@@ -158,3 +158,5 @@ skills-lock.json
 *_pb2_grpc.py
 
 *.pem
+
+CLAUDE.md
