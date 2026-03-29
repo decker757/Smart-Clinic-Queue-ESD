@@ -47,6 +47,18 @@ channels:
       message:
         $ref: '#/components/messages/AppointmentCreated'
 
+  queue.approaching:
+    description: |
+      SMS sent to a waiting generic-queue patient when ≤3 patients are ahead of
+      them in the queue. Prompts the patient to check in via the app within 10
+      minutes or lose their slot. Published by queue-coordinator-service.
+      Deduplicated in-process to prevent repeat SMS on consecutive queue ticks.
+    subscribe:
+      operationId: handleQueueApproaching
+      summary: Turn approaching — send check-in prompt SMS with 10-min deadline
+      message:
+        $ref: '#/components/messages/QueueEvent'
+
   queue.checked_in:
     description: |
       SMS sent confirming the patient is checked in and will be notified when
@@ -103,9 +115,11 @@ channels:
   queue.removed:
     description: |
       SMS notifying the patient they have been removed from the queue. Fires in
-      two cases: (1) patient explicitly responds "No" to the late-detection SMS,
-      (2) the 5-minute TTL dead-letter queue expires with no response. Deduped
-      in-process to prevent double SMS.
+      three cases: (1) patient explicitly responds "No" to the late-detection SMS,
+      (2) the 10-minute late-detection TTL dead-letter expires with no response,
+      (3) the 10-minute approaching-checkin TTL dead-letter expires (generic queue
+      patient did not check in after being notified). Deduped in-process to
+      prevent double SMS.
     subscribe:
       operationId: handleQueueRemoved
       summary: Patient removed from queue — send removal SMS

@@ -115,9 +115,12 @@
             "title": "Appointment Id"
           },
           "appointment_time": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Appointment Time"
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "title": "Appointment Time",
+            "description": "Required for specific doctor bookings — used to detect late arrival. Omit or set to null for generic session-only bookings; late detection is skipped and the patient is checked in directly."
           },
           "patient_location": {
             "$ref": "#/components/schemas/Location"
@@ -130,7 +133,6 @@
         "required": [
           "patient_id",
           "appointment_id",
-          "appointment_time",
           "patient_location",
           "clinic_location"
         ],
