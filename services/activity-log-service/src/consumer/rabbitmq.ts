@@ -40,6 +40,9 @@ export async function startConsumer(): Promise<void> {
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "checkin.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "patient.*");
+    await channel.bindQueue(QUEUE_NAME, EXCHANGE, "payment.*");
+    await channel.bindQueue(QUEUE_NAME, EXCHANGE, "consultation.*");
+    await channel.bindQueue(QUEUE_NAME, EXCHANGE, "staff.*");
 
     console.log(`[RabbitMQ] Activity log listening on ${QUEUE_NAME}`);
 
@@ -58,18 +61,15 @@ export async function startConsumer(): Promise<void> {
         }
 
         try {
-            if (!content.patient_id) {
-                console.warn(`[ActivityLog] Skipping ${routingKey}: missing patient_id`);
-                channel.ack(msg);
-                return;
-            }
-
             // Build a ClinicEvent from the raw message
+            // - payment.* uses consultation_id instead of appointment_id
+            // - staff.* events often only carry appointment_id (no patient_id)
+            // - Stripe metadata may not propagate patient_id
             const event: ClinicEvent = {
                 event_type: routingKey,
-                patient_id: content.patient_id,
-                appointment_id: content.appointment_id ?? undefined,
-                actor: content.actor ?? "system",
+                patient_id: content.patient_id ?? content.consultation_id ?? content.appointment_id ?? "unknown",
+                appointment_id: content.appointment_id ?? content.consultation_id ?? undefined,
+                actor: content.actor ?? content.checked_in_by ?? content.viewed_by ?? "system",
                 payload: content,
             };
 
