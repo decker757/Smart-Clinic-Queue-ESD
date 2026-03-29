@@ -1,0 +1,119 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Stripe Payment Wrapper",
+    "version": "1.0.0",
+    "description": "Wraps Stripe for payment session creation and webhook handling. Exposes two HTTP endpoints consumed by orchestrators, and a gRPC endpoint (`payment.PaymentService/CreatePayment` on port 50055) for internal callers. Publishes `payment.completed` and `payment.failed` events to RabbitMQ on webhook receipt."
+  },
+  "paths": {
+    "/api/payments/create-session": {
+      "post": {
+        "summary": "Create Stripe Checkout Session",
+        "description": "Creates a Stripe Checkout session for a consultation and returns the hosted payment URL. The consultation fee amount and currency are read from service environment variables.",
+        "tags": ["Payments"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout session created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSessionResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Stripe API error"
+          }
+        }
+      }
+    },
+    "/api/payments/webhook": {
+      "post": {
+        "summary": "Stripe Webhook Handler",
+        "description": "Receives raw Stripe webhook events. Validates the `Stripe-Signature` header against `STRIPE_WEBHOOK_SIGNING_SECRET`. On `checkout.session.completed`, publishes `payment.completed` to the `clinic.events` exchange. On `payment_intent.payment_failed`, publishes `payment.failed`.",
+        "tags": ["Payments"],
+        "parameters": [
+          {
+            "name": "stripe-signature",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "HMAC signature provided by Stripe for payload verification"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Raw Stripe event object (passed through directly from Stripe)"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event acknowledged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Stripe signature or malformed payload"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateSessionRequest": {
+        "type": "object",
+        "required": ["appointment_id", "patient_id"],
+        "properties": {
+          "appointment_id": {
+            "type": "string",
+            "description": "Consultation/appointment ID stored in Stripe session metadata as `consultation_id`"
+          },
+          "patient_id": {
+            "type": "string",
+            "description": "BetterAuth nanoid of the patient, stored in Stripe session metadata"
+          }
+        }
+      },
+      "CreateSessionResponse": {
+        "type": "object",
+        "properties": {
+          "payment_link": {
+            "type": "string",
+            "format": "uri",
+            "description": "Stripe-hosted Checkout URL — redirect the patient here to complete payment"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Stripe Checkout session ID"
+          }
+        }
+      }
+    }
+  }
+}

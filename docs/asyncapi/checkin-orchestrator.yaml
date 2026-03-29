@@ -1,0 +1,117 @@
+asyncapi: 2.6.0
+
+info:
+  title: Check-in Orchestrator — AMQP API
+  version: 1.0.0
+  description: |
+    Publishes queue state events to the `clinic.events` topic exchange after
+    a patient checks in via HTTP. Uses a TTL dead-letter queue to automatically
+    remove unresponsive late patients after 5 minutes.
+
+servers:
+  production:
+    url: '{RABBITMQ_URL}'
+    protocol: amqp
+    description: CloudAMQP hosted broker
+
+channels:
+  queue.checked_in:
+    description: |
+      Published when a patient checks in on time (travel ETA is within the
+      appointment window). Queue-coordinator moves the patient to checked_in status.
+    publish:
+      operationId: onQueueCheckedIn
+      summary: Patient checked in on time
+      message:
+        $ref: '#/components/messages/QueueCheckedIn'
+
+  queue.late_detected:
+    description: |
+      Published when a patient's travel ETA exceeds their appointment window.
+      Notification service sends an SMS asking the patient to confirm they are
+      on their way. A 5-minute TTL dead-letter queue is armed simultaneously.
+    publish:
+      operationId: onQueueLateDetected
+      summary: Late patient detected — SMS confirmation requested
+      message:
+        $ref: '#/components/messages/QueueLateDetected'
+
+  queue.deprioritized:
+    description: |
+      Published when a late patient confirms they are still on their way
+      (POST /api/check-in/confirm with response=yes). Queue-coordinator moves
+      them to the back of the queue.
+    publish:
+      operationId: onQueueDeprioritized
+      summary: Patient deprioritized (confirmed late, moved to back)
+      message:
+        $ref: '#/components/messages/QueueDeprioritized'
+
+  queue.removed:
+    description: |
+      Published in two cases:
+      1. Patient responds "no" to the late confirmation SMS.
+      2. The 5-minute TTL dead-letter queue expires (patient did not respond).
+      Queue-coordinator removes the patient from the queue.
+    publish:
+      operationId: onQueueRemoved
+      summary: Patient removed from queue (no-response or declined)
+      message:
+        $ref: '#/components/messages/QueueRemoved'
+
+components:
+  messages:
+    QueueCheckedIn:
+      name: QueueCheckedIn
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, patient_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          patient_id:
+            type: string
+
+    QueueLateDetected:
+      name: QueueLateDetected
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, patient_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          patient_id:
+            type: string
+          eta_minutes:
+            type: integer
+            description: Estimated travel time in minutes
+
+    QueueDeprioritized:
+      name: QueueDeprioritized
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, patient_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          patient_id:
+            type: string
+
+    QueueRemoved:
+      name: QueueRemoved
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, patient_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          patient_id:
+            type: string

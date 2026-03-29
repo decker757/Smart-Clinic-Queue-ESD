@@ -14,7 +14,13 @@ async def lifespan(app: FastAPI):
     await rabbitmq.disconnect()
 
 
-app = FastAPI(title="Consultation Orchestrator", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="Consultation Orchestrator",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/api/composite/consultations/docs",
+    openapi_url="/api/composite/consultations/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,9 +1,11 @@
 import express, { Request, Response, NextFunction } from "express";
+import swaggerUi from "swagger-ui-express";
 import patientRouter from "./controller/Patient";
 import historyRouter from "./controller/History";
 import memoRouter from "./controller/Memo";
 import { startGrpcServer } from "./grpc";
 import { fetchPublicKey } from "./middleware/auth";
+import { swaggerSpec } from "./swagger";
 
 const app = express();
 
@@ -20,6 +22,8 @@ app.use(express.json());
 app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", service: "patient-service" });
 });
+app.get("/api/patients/openapi.json", (_req: Request, res: Response) => res.json(swaggerSpec));
+app.use("/api/patients/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use("/api/patients", patientRouter);
 app.use("/api/patients/:id/history", historyRouter);

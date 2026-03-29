@@ -1,0 +1,73 @@
+asyncapi: 2.6.0
+
+info:
+  title: Patient Orchestrator — AMQP API
+  version: 1.0.0
+  description: |
+    Publishes patient lifecycle events to the `clinic.events` exchange after
+    profile mutations (create, update), medical history additions, and memo
+    uploads. Consumed by the activity-log-service for audit trail.
+
+servers:
+  production:
+    url: '{RABBITMQ_URL}'
+    protocol: amqp
+    description: CloudAMQP hosted broker
+
+channels:
+  patient.profile_created:
+    description: Published when a new patient profile is created on first login.
+    publish:
+      operationId: onPatientProfileCreated
+      message:
+        $ref: '#/components/messages/PatientEvent'
+
+  patient.profile_updated:
+    description: Published when a patient updates their profile (phone, DOB, NRIC, allergies).
+    publish:
+      operationId: onPatientProfileUpdated
+      message:
+        $ref: '#/components/messages/PatientEvent'
+
+  patient.history_added:
+    description: Published when a medical history entry is added for a patient.
+    publish:
+      operationId: onPatientHistoryAdded
+      message:
+        $ref: '#/components/messages/PatientEvent'
+
+  patient.memo_created:
+    description: |
+      Published when a memo or medical document is uploaded for a patient.
+      Covers text memos, file uploads (PDF/image), and URL-based memos.
+    publish:
+      operationId: onPatientMemoCreated
+      message:
+        $ref: '#/components/messages/MemoEvent'
+
+components:
+  messages:
+    PatientEvent:
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+
+    MemoEvent:
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id, memo_id]
+        properties:
+          patient_id:
+            type: string
+          memo_id:
+            type: string
+            format: uuid
+          record_type:
+            type: string
+            description: Type of memo (memo, mc, referral, prescription, lab_result, etc.)

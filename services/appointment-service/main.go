@@ -2,8 +2,10 @@ package main
 
 import (
 	"log"
+	"net/http"
 
 	"appointment-service/db"
+	"appointment-service/docs"
 	"appointment-service/handlers"
 	"appointment-service/middleware"
 
@@ -24,6 +26,13 @@ func main(){
 	defer database.Close()
 
 	router := gin.Default()
+
+	router.GET("/appointments/docs", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(docs.SwaggerHTML))
+	})
+	router.GET("/appointments/openapi.json", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/json", []byte(docs.SwaggerJSON))
+	})
 
 	appts := router.Group("/appointments", middleware.RequireAuth(pubKey))
 	{

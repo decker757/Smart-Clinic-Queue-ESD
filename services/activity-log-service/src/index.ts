@@ -1,6 +1,9 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
+import swaggerUi from "swagger-ui-express";
+import activityLogRouter from "./controller/ActivityLog";
 import { startConsumer } from "./consumer/rabbitmq";
+import { swaggerSpec } from "./swagger";
 
 const app = express();
 
@@ -21,6 +24,10 @@ app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", service: "activity-log-service" });
 });
 
+app.get("/api/activity-log/openapi.json", (_req: Request, res: Response) => res.json(swaggerSpec));
+app.use("/api/activity-log/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+app.use("/api/activity-log", activityLogRouter);
 
 const PORT = parseInt(process.env.PORT || "3005");
 

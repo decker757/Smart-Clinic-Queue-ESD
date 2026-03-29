@@ -2,4 +2,5 @@ fastapi
 uvicorn[standard]
 aio-pika
 asyncpg
+httpx
 pydantic-settings

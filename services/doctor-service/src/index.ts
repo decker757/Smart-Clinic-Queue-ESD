@@ -1,9 +1,11 @@
 import express, { Request, Response, NextFunction } from "express";
+import swaggerUi from "swagger-ui-express";
 import doctorRouter from "./controller/Doctor";
 import consultationRouter from "./controller/Consultation";
 import { startGrpcServer } from "./grpc";
 import { config } from "./config";
 import { fetchPublicKey, requireAuth } from "./middleware/auth";
+import { swaggerSpec } from "./swagger";
 
 const app = express();
 
@@ -17,6 +19,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use(express.json());
 app.get("/health", (_req: Request, res: Response) => res.json({ status: "ok", service: "doctor-service" }));
+app.get("/api/doctors/openapi.json", (_req: Request, res: Response) => res.json(swaggerSpec));
+app.use("/api/doctors/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use("/api/doctors", requireAuth, doctorRouter);
 app.use("/api/doctors/consultations", requireAuth, consultationRouter);

@@ -21,7 +21,13 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 
-app = FastAPI(title="Payment Service", lifespan=lifespan)
+app = FastAPI(
+    title="Payment Service",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/api/payments/docs",
+    openapi_url="/api/payments/openapi.json",
+)
 app.include_router(router)
 
 
