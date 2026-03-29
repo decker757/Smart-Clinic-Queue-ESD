@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
 const MODE = { SESSION: 'session', DOCTOR: 'doctor' }
 const SESSION = { MORNING: 'morning', AFTERNOON: 'afternoon' }
