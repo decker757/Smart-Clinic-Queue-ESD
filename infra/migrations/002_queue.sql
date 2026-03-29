@@ -28,3 +28,11 @@ CREATE INDEX IF NOT EXISTS idx_queue_patient
 
 CREATE INDEX IF NOT EXISTS idx_queue_number
     ON queue_entries(queue_number);
+
+CREATE INDEX IF NOT EXISTS idx_queue_status_doctor
+    ON queue_entries(status, doctor_id)
+    WHERE doctor_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_queue_status_session
+    ON queue_entries(status, session)
+    WHERE session IS NOT NULL;

@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS appointments.doctors (
     id             TEXT        PRIMARY KEY,  -- BetterAuth nanoid
     name           TEXT        NOT NULL,
     specialization TEXT        NOT NULL,
-    slot_capacity  INT         NOT NULL DEFAULT 3,
+    slot_capacity  INT         NOT NULL DEFAULT 1,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -67,6 +67,8 @@ CREATE SEQUENCE IF NOT EXISTS queue.queue_number_afternoon_seq START 1;
 CREATE INDEX IF NOT EXISTS idx_queue_session_status ON queue.queue_entries(session, status);
 CREATE INDEX IF NOT EXISTS idx_queue_patient        ON queue.queue_entries(patient_id);
 CREATE INDEX IF NOT EXISTS idx_queue_number         ON queue.queue_entries(queue_number);
+CREATE INDEX IF NOT EXISTS idx_queue_status_doctor  ON queue.queue_entries(status, doctor_id) WHERE doctor_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_queue_status_session ON queue.queue_entries(status, session)    WHERE session IS NOT NULL;
 
 -- ─── Activity Log ────────────────────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS activity_log;

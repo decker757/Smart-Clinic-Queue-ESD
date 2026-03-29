@@ -276,18 +276,32 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
     try {
         const { rows } = await pool.query(`
             UPDATE queue.queue_entries
-            SET status = 'called', updated_at = NOW()
+            SET status    = 'called',
+                doctor_id = COALESCE(doctor_id, $2),
+                updated_at = NOW()
             WHERE id = (
-                SELECT id FROM queue.queue_entries
-                WHERE status = 'checked_in'
+                SELECT qe.id
+                FROM queue.queue_entries qe
+                INNER JOIN appointments.appointments a
+                    ON a.id = qe.appointment_id::uuid
+                WHERE qe.status = 'checked_in'
                   AND (
-                      -- specific-doctor booking: patient booked this doctor
-                      ($2::text IS NOT NULL AND doctor_id = $2 AND session IS NULL)
+                      -- specific booking for this doctor
+                      ($2::text IS NOT NULL AND qe.doctor_id = $2 AND qe.session IS NULL)
                       OR
-                      -- session-based booking: no doctor preference, match by session
-                      (session = $1 AND doctor_id IS NULL)
+                      -- generic queue patient (no doctor preference)
+                      (qe.session = $1 AND qe.doctor_id IS NULL)
                   )
-                ORDER BY queue_number ASC
+                ORDER BY
+                  -- 0: specific booking whose slot time has arrived → call first
+                  -- 1: generic queue patient → fill gaps between due slots
+                  -- 2: specific booking not yet due → last resort if nothing else is ready
+                  CASE
+                    WHEN qe.doctor_id = $2 AND a.start_time <= NOW() THEN 0
+                    WHEN qe.doctor_id IS NULL                         THEN 1
+                    ELSE                                                   2
+                  END ASC,
+                  qe.queue_number ASC
                 LIMIT 1
             )
             RETURNING *
