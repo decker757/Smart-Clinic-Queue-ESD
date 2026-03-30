@@ -13,6 +13,7 @@ A polyclinic queue management system built with an event-driven microservices ar
 | Database | AWS RDS (PostgreSQL) |
 | Cache | AWS ElastiCache Redis (queue position cache) |
 | Auth | AWS Cognito (RS256 JWT) |
+| Notifications | Twilio (SMS via notification-service) |
 | Payments | Stripe |
 | Frontend | Vue 3 + Vite + Tailwind CSS |
 | Infrastructure | AWS ECS Fargate (16 services) |
