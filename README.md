@@ -291,8 +291,15 @@ IAM → Cognito → RDS → Amazon MQ → ElastiCache → ECR → ECS (Cluster +
    - Name: `role`, Type: String, Mutable: Yes
 
 3. Add a Pre-SignUp Lambda trigger to auto-confirm users (avoids email verification flow):
-   - Create a Lambda function that sets `event.response.autoConfirmUser = true`
-   - Attach under **User Pool → Triggers → Pre sign-up**
+   - Go to **Lambda → Create function**, runtime: Python 3.11, name: `cognito-auto-confirm`
+   - Paste this code and click Deploy:
+     ```python
+     def lambda_handler(event, context):
+         event['response']['autoConfirmUser'] = True
+         event['response']['autoVerifyEmail'] = True
+         return event
+     ```
+   - Attach under **Cognito → User Pool → User pool properties → Add Lambda trigger → Sign-up → Pre sign-up**
 
 4. Note your **User Pool ID** and **App Client ID** — used in all service env vars.
 
