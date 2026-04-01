@@ -24,6 +24,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.json());
+app.get("/health", (_req: Request, res: Response) => res.json({ status: "ok", service: "queue-coordinator-service" }));
 app.get("/api/queue/openapi.json", (_req: Request, res: Response) => res.json(swaggerSpec));
 app.use("/api/queue/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/queue", queueRouter);

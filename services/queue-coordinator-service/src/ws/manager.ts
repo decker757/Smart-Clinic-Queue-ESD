@@ -13,6 +13,9 @@ const subscriptions = new Map<string, Set<WebSocket>>();
 // Set of connected staff clients — receive all queue updates
 const staffClients = new Set<WebSocket>();
 
+// Roles allowed to connect to the staff WebSocket feed.
+// Maps to Cognito custom:role claim. "nurse" is intentionally excluded
+// as nurses use the patient-facing queue view in the current workflow.
 const STAFF_ROLES = new Set(["staff", "doctor", "admin"]);
 
 // Both WSS instances use noServer:true so we can route upgrade events manually.
@@ -111,6 +114,11 @@ patientWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
         ws.on("error", (err) => {
             console.error(`[WS] Error for appointment ${appointmentId}:`, err.message);
+            // Clean up subscription on error (mirrors the close handler)
+            subscriptions.get(appointmentId)?.delete(ws);
+            if (subscriptions.get(appointmentId)?.size === 0) {
+                subscriptions.delete(appointmentId);
+            }
         });
     } catch (e) {
         console.error("[WS] Unexpected error in connection handler:", e);
@@ -150,6 +158,7 @@ staffWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
         ws.on("error", (err) => {
             console.error("[WS:staff] Error:", err.message);
+            staffClients.delete(ws);
         });
     } catch (e) {
         console.error("[WS:staff] Unexpected error:", e);

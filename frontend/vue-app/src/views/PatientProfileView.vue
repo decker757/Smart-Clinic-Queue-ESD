@@ -89,7 +89,7 @@ async function save() {
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail ?? 'Failed to save profile')
+      throw new Error(data.detail ?? data.error ?? 'Failed to save profile')
     }
     router.push('/dashboard')
   } catch (e) {

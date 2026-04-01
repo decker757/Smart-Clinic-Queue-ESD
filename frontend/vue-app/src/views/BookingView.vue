@@ -154,7 +154,7 @@ async function bookAppointment() {
     })
     if (!res.ok) {
       const resp = await res.json().catch(() => ({}))
-      throw new Error(resp.detail || 'Booking failed')
+      throw new Error(resp.detail ?? resp.error ?? 'Booking failed')
     }
     success.value = 'Appointment booked successfully!'
     redirectTimer = setTimeout(() => router.push('/dashboard'), 1500)

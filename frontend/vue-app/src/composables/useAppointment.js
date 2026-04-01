@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { apiError } from '@/utils/api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const WS_BASE  = import.meta.env.VITE_WS_BASE_URL  ?? API_BASE
@@ -217,7 +218,7 @@ export function useAppointment() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.error ?? 'Check-in failed. Please try again.')
+      throw new Error(apiError(body, 'Check-in failed. Please try again.'))
     }
     return res.json()
   }
@@ -241,7 +242,7 @@ export function useAppointment() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Check-in failed. Please try again.')
+      throw new Error(apiError(body, 'Check-in failed. Please try again.'))
     }
     return res.json()
   }
@@ -257,7 +258,7 @@ export function useAppointment() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Failed to confirm. Please try again.')
+      throw new Error(apiError(body, 'Failed to confirm. Please try again.'))
     }
     return res.json()
   }

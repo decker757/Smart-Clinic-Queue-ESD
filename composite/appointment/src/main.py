@@ -76,6 +76,11 @@ async def publish_event(routing_key: str, payload: dict):
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "composite-appointment"}
+
+
 @app.get("/api/composite/appointments", response_model=List[AppointmentResponse])
 async def list_appointments(
     patient_id: str = Query(..., description="Filter by patient ID"),

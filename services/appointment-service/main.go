@@ -27,6 +27,9 @@ func main(){
 
 	router := gin.Default()
 
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "appointment-service"})
+	})
 	router.GET("/appointments/docs", func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(docs.SwaggerHTML))
 	})

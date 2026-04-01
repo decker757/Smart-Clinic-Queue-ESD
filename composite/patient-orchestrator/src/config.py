@@ -3,11 +3,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+_REQUIRED = ["PATIENT_SERVICE_GRPC", "RABBITMQ_URL", "PORT"]
+_missing = [v for v in _REQUIRED if not os.getenv(v)]
+if _missing:
+    raise RuntimeError(f"Missing required env vars: {', '.join(_missing)}")
+
+
 class Settings:
-    PATIENT_SERVICE_GRPC: str = os.getenv("PATIENT_SERVICE_GRPC")
+    PATIENT_SERVICE_GRPC: str = os.getenv("PATIENT_SERVICE_GRPC", "")
     JWKS_URL: str = os.getenv("JWKS_URL", "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json")
-    RABBITMQ_URL: str = os.getenv("RABBITMQ_URL")
-    PORT: int = int(os.getenv("PORT"))
-    PAYMENT_SERVICE_URL: str = os.getenv("PAYMENT_SERVICE_URL", "http://payment-service.smart-clinic.local:3008")
+    RABBITMQ_URL: str = os.getenv("RABBITMQ_URL", "")
+    PORT: int = int(os.getenv("PORT", "8001"))
+    PAYMENT_SERVICE_URL: str = os.getenv("PAYMENT_SERVICE_URL", "http://payment-service:3008")
 
 settings = Settings()

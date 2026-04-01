@@ -11,7 +11,7 @@ const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 const MAX_RETRIES = 10;
 
-async function connectWithRetry(url: string): Promise<amqp.Connection> {
+async function connectWithRetry(url: string) {
     let attempt = 0;
     while (true) {
         try {

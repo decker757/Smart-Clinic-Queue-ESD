@@ -90,7 +90,7 @@ async function submitText() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.error ?? 'Failed to save note')
+      throw new Error(body.detail ?? body.error ?? 'Failed to save note')
     }
     const memo = await res.json()
     memos.value.unshift(memo)
@@ -125,7 +125,7 @@ async function submitFile() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.error ?? 'Upload failed')
+      throw new Error(body.detail ?? body.error ?? 'Upload failed')
     }
     const memo = await res.json()
     memos.value.unshift(memo)

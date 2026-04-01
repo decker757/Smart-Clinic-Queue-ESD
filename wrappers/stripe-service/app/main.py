@@ -32,4 +32,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "stripe-service"}
+
+
 app.include_router(payments.router, prefix="/api/payments")
