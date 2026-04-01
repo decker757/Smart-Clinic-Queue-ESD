@@ -7,11 +7,32 @@ import { initPublisher } from "../messaging/publisher";
 const EXCHANGE = "clinic.events";
 const QUEUE_NAME = "queue-coordinator.appointment-events";
 
-export async function startConsumer(): Promise<void> {
-    const url = process.env.RABBITMQ_URL;
-    if (!url) throw new Error("RABBITMQ_URL is not set");
+const RECONNECT_BASE_MS = 1_000;
+const RECONNECT_MAX_MS = 30_000;
+const MAX_RETRIES = 10;
 
-    const connection = await amqp.connect(url);
+async function connectWithRetry(url: string): Promise<amqp.Connection> {
+    let attempt = 0;
+    while (true) {
+        try {
+            const connection = await amqp.connect(url);
+            if (attempt > 0) console.log("[RabbitMQ] Reconnected successfully");
+            return connection;
+        } catch (e: any) {
+            attempt++;
+            if (attempt > MAX_RETRIES) {
+                console.error(`[RabbitMQ] Failed after ${MAX_RETRIES} attempts, giving up`);
+                throw e;
+            }
+            const delay = Math.min(RECONNECT_BASE_MS * 2 ** (attempt - 1), RECONNECT_MAX_MS);
+            console.warn(`[RabbitMQ] Connection attempt ${attempt} failed: ${e.message}. Retrying in ${delay}ms...`);
+            await new Promise((r) => setTimeout(r, delay));
+        }
+    }
+}
+
+async function setupConsumer(url: string): Promise<void> {
+    const connection = await connectWithRetry(url);
     const channel = await connection.createChannel();
 
     await channel.assertExchange(EXCHANGE, "topic", { durable: true });
@@ -135,4 +156,23 @@ export async function startConsumer(): Promise<void> {
     });
 
     console.log("[RabbitMQ] Queue coordinator listening on", QUEUE_NAME);
+
+    // Auto-reconnect on unexpected connection close
+    connection.on("error", (err) => {
+        console.error("[RabbitMQ] Connection error:", err.message);
+    });
+    connection.on("close", () => {
+        console.warn("[RabbitMQ] Connection closed unexpectedly. Reconnecting...");
+        setTimeout(() => setupConsumer(url).catch((e) => {
+            console.error("[RabbitMQ] Reconnection failed:", e.message);
+            process.exit(1);
+        }), RECONNECT_BASE_MS);
+    });
+}
+
+export async function startConsumer(): Promise<void> {
+    const url = process.env.RABBITMQ_URL;
+    if (!url) throw new Error("RABBITMQ_URL is not set");
+
+    await setupConsumer(url);
 }
