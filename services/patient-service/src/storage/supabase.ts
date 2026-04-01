@@ -10,7 +10,9 @@ export async function uploadFile(
     buffer: Buffer,
     mimetype: string
 ): Promise<string> {
-    const key = `${patientId}/${Date.now()}-${filename}`;
+    // Sanitise filename to prevent path-traversal (e.g. "../../admin/secret")
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_").substring(0, 255);
+    const key = `${patientId}/${Date.now()}-${safeName}`;
 
     await s3.send(new PutObjectCommand({
         Bucket: BUCKET,
