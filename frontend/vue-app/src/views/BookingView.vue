@@ -110,7 +110,10 @@ async function fetchSlots() {
     )
     if (!res.ok) throw new Error('Failed to load available slots')
     const data = await res.json()
-    availableSlots.value = (data.slots || data || []).filter((s) => s.status === 'available')
+    const now = new Date()
+    availableSlots.value = (data.slots || data || []).filter(
+      (s) => s.status === 'available' && new Date(s.start_time) > now,
+    )
   } catch (e) {
     if (e.name !== 'AbortError') error.value = e.message
   } finally {

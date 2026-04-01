@@ -32,11 +32,13 @@ export async function listDoctors(): Promise<Doctor[]> {
 export async function getDoctorSlots(doctor_id: string, date?: string): Promise<TimeSlot[]> {
     // Default to today in SGT (UTC+8) if no date provided
     const targetDate = date ?? new Date(Date.now() + 8 * 3600000).toISOString().split("T")[0];
+    const nowUTC = new Date();
     const { rows } = await pool.query(
         `SELECT * FROM doctors.time_slots
          WHERE doctor_id = $1 AND status = 'available' AND start_time::date = $2::date
+           AND start_time > $3
          ORDER BY start_time`,
-        [doctor_id, targetDate]
+        [doctor_id, targetDate, nowUTC]
     );
     return rows as TimeSlot[];
 }
