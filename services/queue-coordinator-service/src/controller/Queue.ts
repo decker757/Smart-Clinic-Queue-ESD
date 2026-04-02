@@ -102,7 +102,7 @@ router.post("/call-next", async (req: Request, res: Response) => {
         res.json(next);
         broadcastAllPatientPositions().catch(() => {});
     } catch (e: any) {
-        if (e.message === "No waiting patients in queue") {
+        if (e.message === "No checked-in patients in queue") {
             res.status(404).json({ error: e.message });
         } else {
             res.status(500).json({ error: "Internal server error" });
