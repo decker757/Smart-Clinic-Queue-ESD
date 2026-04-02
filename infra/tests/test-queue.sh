@@ -5,7 +5,7 @@
 
 BASE_AUTH="http://localhost:3000"
 BASE_COMPOSITE="http://localhost:8080"
-BASE_QUEUE="http://localhost:3002"
+BASE_QUEUE="http://localhost:3002/api/queue"
 EMAIL="qtest-$(date +%s)@test.com"
 PASSWORD="password123"
 
@@ -13,7 +13,11 @@ PASSWORD="password123"
 req() {
   TMPFILE=$(mktemp)
   CODE=$(curl -s -o "$TMPFILE" -w "%{http_code}" "$@")
-  jq . "$TMPFILE"
+  if jq . "$TMPFILE" >/dev/null 2>&1; then
+    jq . "$TMPFILE"
+  else
+    cat "$TMPFILE"
+  fi
   echo "[HTTP $CODE]"
   rm -f "$TMPFILE"
 }
