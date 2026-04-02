@@ -1,23 +1,23 @@
 from fastapi import APIRouter, Depends
 from src.models.doctor import UpdateSlotStatusRequest, AddConsultationNotesRequest
 from src.controller import doctor as doctor_controller
-from src.dependencies import require_staff, require_auth, AuthContext
+from src.dependencies import require_staff, AuthContext
 
 router = APIRouter(prefix="/api/composite/staff/doctors", tags=["doctors"])
 
 
 @router.get("")
-async def list_doctors(auth: AuthContext = Depends(require_auth)):
+async def list_doctors(auth: AuthContext = Depends(require_staff)):
     return await doctor_controller.list_doctors()
 
 
 @router.get("/{doctor_id}")
-async def get_doctor(doctor_id: str, auth: AuthContext = Depends(require_auth)):
+async def get_doctor(doctor_id: str, auth: AuthContext = Depends(require_staff)):
     return await doctor_controller.get_doctor(doctor_id)
 
 
 @router.get("/{doctor_id}/slots")
-async def get_doctor_slots(doctor_id: str, auth: AuthContext = Depends(require_auth)):
+async def get_doctor_slots(doctor_id: str, auth: AuthContext = Depends(require_staff)):
     return await doctor_controller.get_doctor_slots(doctor_id)
 
 

@@ -10,6 +10,9 @@ ALTER TABLE betterauth.user
 -- ─── Appointments ────────────────────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS appointments;
 
+-- Lightweight copy of doctors used only for the FK on appointments.appointments.doctor_id.
+-- Kept in sync automatically by the trigger trg_sync_doctor_to_appointments on doctors.doctors.
+-- If a doctor is added manually here, also add them to doctors.doctors (the source of truth).
 CREATE TABLE IF NOT EXISTS appointments.doctors (
     id             TEXT        PRIMARY KEY,  -- BetterAuth nanoid
     name           TEXT        NOT NULL,

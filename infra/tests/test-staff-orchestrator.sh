@@ -95,6 +95,19 @@ DOCTOR_JWT=$(req_json "$BASE_AUTH/api/auth/token" \
 [ -z "$DOCTOR_JWT" ] || [ "$DOCTOR_JWT" = "null" ] && fail "Could not get doctor JWT"
 pass "JWT acquired"
 
+echo ""
+echo "--- Waiting for Kong staff route readiness (max 60s) ---"
+STAFF_READY_CODE="000"
+for _ in $(seq 1 30); do
+  STAFF_READY_CODE=$(req_code "$BASE_STAFF/doctors" \
+    -H "Authorization: Bearer $DOCTOR_JWT")
+  if [ "$STAFF_READY_CODE" = "200" ]; then
+    break
+  fi
+  sleep 2
+done
+[ "$STAFF_READY_CODE" = "200" ] || fail "Kong/staff route not ready (last HTTP $STAFF_READY_CODE)"
+
 # ── 2. Doctor endpoints ───────────────────────────────────────────────────────
 
 echo ""
@@ -185,13 +198,7 @@ echo ""
 echo "=== 11. Reject patient JWT on staff route ==="
 CODE=$(req_code "$BASE_STAFF/doctors" \
   -H "Authorization: Bearer $PATIENT_JWT")
-if [ "$CODE" = "403" ]; then
-  pass "Patient JWT rejected (insufficient role)"
-elif [ "$CODE" = "200" ]; then
-  echo "  ⚠ WARN: Patient JWT currently allowed on staff route (expected 403 when RBAC is enforced)"
-else
-  fail "Unexpected response for patient JWT on staff route (got HTTP $CODE, expected 200 or 403)"
-fi
+check_code "$CODE" "403" "Patient JWT rejected on staff route (insufficient role)"
 
 # ── 5. Queue management ───────────────────────────────────────────────────────
 
