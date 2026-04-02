@@ -144,6 +144,25 @@ CREATE TABLE IF NOT EXISTS doctors.doctors (
     created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Sync new doctors into appointments.doctors so the FK on
+-- appointments.appointments.doctor_id is always satisfiable.
+CREATE OR REPLACE FUNCTION doctors.sync_to_appointments()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO appointments.doctors (id, name, specialization, slot_capacity)
+    VALUES (NEW.id, NEW.name, COALESCE(NEW.specialisation, ''), 1)
+    ON CONFLICT (id) DO UPDATE
+        SET name = EXCLUDED.name,
+            specialization = EXCLUDED.specialization;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_doctor_to_appointments ON doctors.doctors;
+CREATE TRIGGER trg_sync_doctor_to_appointments
+    AFTER INSERT OR UPDATE ON doctors.doctors
+    FOR EACH ROW EXECUTE FUNCTION doctors.sync_to_appointments();
+
 CREATE TABLE IF NOT EXISTS doctors.time_slots (
     id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     doctor_id  TEXT        REFERENCES doctors.doctors(id),

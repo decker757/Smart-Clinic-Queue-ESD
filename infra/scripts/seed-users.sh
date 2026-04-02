@@ -88,6 +88,20 @@ doctors_exec "INSERT INTO doctors (id, name, specialisation, contact)
               ON CONFLICT (id) DO NOTHING" > /dev/null
 pass "doctors.doctors record upserted"
 
+# Also insert into appointments.doctors so the FK on appointments.appointments.doctor_id works
+appt_exec() {
+  SQL="SET search_path TO appointments; $1"
+  if command -v psql >/dev/null 2>&1; then
+    psql "$SUPABASE_URL" -c "$SQL" -t -A 2>/dev/null
+  else
+    docker run --rm postgres:16-alpine psql "$SUPABASE_URL" -c "$SQL" -t -A 2>/dev/null
+  fi
+}
+appt_exec "INSERT INTO doctors (id, name, specialization, slot_capacity)
+           VALUES ('$DOCTOR_ID', '$DOCTOR_NAME', 'General Practice', 1)
+           ON CONFLICT (id) DO NOTHING" > /dev/null
+pass "appointments.doctors record upserted (FK sync)"
+
 echo "  email:    $DOCTOR_EMAIL"
 echo "  password: $DOCTOR_PASSWORD"
 echo "  user_id:  $DOCTOR_ID"

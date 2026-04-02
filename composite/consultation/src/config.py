@@ -26,7 +26,7 @@ class Settings:
 
     # ── Auth ─────────────────────────────────────────────────
     JWKS_URL: str = os.getenv(
-        "JWKS_URL", "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json"
+        "JWKS_URL", "http://auth-service:3000/api/auth/jwks"
     )
 
     # ── Messaging ────────────────────────────────────────────

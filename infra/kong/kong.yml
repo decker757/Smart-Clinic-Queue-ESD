@@ -31,6 +31,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -57,6 +58,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -80,6 +82,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -103,6 +106,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -129,6 +133,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -154,6 +159,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -177,6 +183,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -200,6 +207,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -223,6 +231,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -250,6 +259,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
