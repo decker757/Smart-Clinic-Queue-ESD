@@ -15,6 +15,8 @@ services:
       COMPOSITE_PATIENT_URL: http://composite-patient-orchestrator:8001
       COMPOSITE_CONSULTATION_URL: http://composite-consultation:8002
       COMPOSITE_STAFF_URL: http://composite-staff-orchestrator:8004
+      PATIENT_SERVICE_URL: http://patient-service:3007
+      ACTIVITY_LOG_SERVICE_URL: http://activity-log-service:3005
       DOCTOR_SERVICE_URL: http://doctor-service:3006
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
       CHECKIN_ORCHESTRATOR_URL: http://checkin-orchestrator:8000
