@@ -1,7 +1,8 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from app.routes import router
 from app.consumer import start_consumer
 from app.db import close_pool
@@ -30,6 +31,10 @@ app = FastAPI(
     docs_url="/api/payments/docs",
     openapi_url="/api/payments/openapi.json",
 )
+@app.exception_handler(HTTPException)
+async def unified_error_envelope(request: Request, exc: HTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+
 app.include_router(router)
 
 

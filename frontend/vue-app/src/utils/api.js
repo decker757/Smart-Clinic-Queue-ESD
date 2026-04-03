@@ -1,9 +1,9 @@
 /**
  * Extract an error message from an API response body.
  *
- * Node.js services return { error: "..." }, Python/FastAPI returns { detail: "..." }.
- * This helper normalises both formats so callers don't need to check each field.
+ * All services now return { error: "..." } as the standard envelope.
+ * Falls back to { detail: "..." } for any legacy responses.
  */
 export function apiError(body, fallback = 'Something went wrong') {
-  return body?.detail ?? body?.error ?? fallback
+  return body?.error ?? body?.detail ?? fallback
 }

@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from src.routes import patient, history, memo, payment
 
 app = FastAPI(
@@ -9,6 +10,11 @@ app = FastAPI(
     openapi_url="/api/composite/patients/openapi.json",
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.exception_handler(HTTPException)
+async def unified_error_envelope(request: Request, exc: HTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
 
 app.include_router(patient.router)
 app.include_router(history.router)
