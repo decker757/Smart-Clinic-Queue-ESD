@@ -1,9 +1,11 @@
 import asyncio
 import json
+import logging
 import aio_pika
 from dataclasses import dataclass
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import List, Optional
 from src.config import settings
 from src.models.appointment import (
@@ -15,6 +17,8 @@ from src.models.appointment import (
 from src.services import auth, appointment as appointment_service
 from src.redis_client import get_idempotency, set_idempotency
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="Appointment Composite Service",
     version="1.0.0",
@@ -22,6 +26,12 @@ app = FastAPI(
     openapi_url="/api/composite/appointments/openapi.json",
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.exception_handler(HTTPException)
+async def unified_error_envelope(request: Request, exc: HTTPException):
+    """Standardize error responses: { "error": "..." } across all services."""
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
 
 
 # ─── Auth dependency ──────────────────────────────────────────────────────────
@@ -43,32 +53,50 @@ async def require_auth(authorization: str = Header(...)) -> AuthContext:
 
 # ─── RabbitMQ helper ──────────────────────────────────────────────────────────
 
-async def publish_event(routing_key: str, payload: dict):
-    """Publish an event to the clinic topic exchange.
+PUBLISH_MAX_RETRIES = 3
+PUBLISH_RETRY_DELAY = 0.5  # seconds, doubles each attempt
 
-    routing_key examples: "appointment.booked", "appointment.cancelled"
-    Each downstream service binds its own queue to this exchange,
-    so all subscribers receive every matching event independently.
+
+async def publish_event(routing_key: str, payload: dict):
+    """Publish an event to the clinic topic exchange with retry.
+
+    Retries up to 3 times with exponential backoff. If all attempts fail,
+    raises an HTTPException so the caller can decide how to handle it
+    (e.g. warn the client instead of silently losing the event).
     """
-    try:
-        connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
-        async with connection:
-            channel = await connection.channel()
-            exchange = await channel.declare_exchange(
-                "clinic.events",
-                aio_pika.ExchangeType.TOPIC,
-                durable=True,
+    last_error: Exception | None = None
+    for attempt in range(PUBLISH_MAX_RETRIES):
+        try:
+            connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
+            async with connection:
+                channel = await connection.channel()
+                exchange = await channel.declare_exchange(
+                    "clinic.events",
+                    aio_pika.ExchangeType.TOPIC,
+                    durable=True,
+                )
+                await exchange.publish(
+                    aio_pika.Message(
+                        body=json.dumps(payload).encode(),
+                        content_type="application/json",
+                    ),
+                    routing_key=routing_key,
+                )
+            return  # success
+        except Exception as e:
+            last_error = e
+            delay = PUBLISH_RETRY_DELAY * (2 ** attempt)
+            logger.warning(
+                "[RabbitMQ] Publish %s attempt %d/%d failed: %s. Retrying in %.1fs...",
+                routing_key, attempt + 1, PUBLISH_MAX_RETRIES, e, delay,
             )
-            await exchange.publish(
-                aio_pika.Message(
-                    body=json.dumps(payload).encode(),
-                    content_type="application/json",
-                ),
-                routing_key=routing_key,
-            )
-    except Exception as e:
-        # log but don't fail the request if RabbitMQ is unavailable
-        print(f"[RabbitMQ] Failed to publish {routing_key}: {e}")
+            await asyncio.sleep(delay)
+
+    logger.error("[RabbitMQ] Publish %s failed after %d attempts: %s", routing_key, PUBLISH_MAX_RETRIES, last_error)
+    raise HTTPException(
+        status_code=503,
+        detail=f"Event bus unavailable — {routing_key} could not be published after {PUBLISH_MAX_RETRIES} retries",
+    )
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -116,6 +144,7 @@ async def create_appointment(
         session=appt.session,
     ).model_dump(mode="json")
 
+    publish_failed = False
     if body.slot_id:
         try:
             # mark_slot_booked and publish_event are independent — run concurrently
@@ -131,14 +160,30 @@ async def create_appointment(
                 except Exception:
                     pass
                 raise HTTPException(status_code=409, detail="This time slot was just booked by someone else. Please choose another.")
-            raise
+            if e.status_code == 503:
+                # Publish failed but slot was booked — appointment is valid, queue entry missing
+                publish_failed = True
+                logger.error("Event publish failed for appointment %s — queue entry will be missing", appt.id)
+            else:
+                raise
     else:
-        await publish_event("appointment.booked", event_payload)
+        try:
+            await publish_event("appointment.booked", event_payload)
+        except HTTPException as e:
+            if e.status_code == 503:
+                publish_failed = True
+                logger.error("Event publish failed for appointment %s — queue entry will be missing", appt.id)
+            else:
+                raise
+
+    response = appt.model_dump(mode="json")
+    if publish_failed:
+        response["warning"] = "Appointment created but queue notification failed — please contact the clinic if your queue number does not appear."
 
     if x_idempotency_key:
-        await set_idempotency(x_idempotency_key, appt.model_dump(mode="json"))
+        await set_idempotency(x_idempotency_key, response)
 
-    return appt
+    return response
 
 
 @app.get("/api/composite/appointments/{appointment_id}", response_model=AppointmentResponse)
@@ -177,11 +222,17 @@ async def cancel_appointment(
             import logging
             logging.warning(f"Could not release slot for cancelled appointment {appointment_id}: {e}")
 
-    await publish_event("appointment.cancelled", {
-        "appointment_id": appointment_id,
-        "patient_id": appt.patient_id,
-        "doctor_id": appt.doctor_id,
-        "start_time": appt.start_time.isoformat() if appt.start_time else None,
-    })
+    try:
+        await publish_event("appointment.cancelled", {
+            "appointment_id": appointment_id,
+            "patient_id": appt.patient_id,
+            "doctor_id": appt.doctor_id,
+            "start_time": appt.start_time.isoformat() if appt.start_time else None,
+        })
+    except HTTPException as e:
+        if e.status_code == 503:
+            logger.error("Event publish failed for cancellation %s — queue may not update", appointment_id)
+        else:
+            raise
 
     return appt

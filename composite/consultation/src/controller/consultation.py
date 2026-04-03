@@ -120,7 +120,7 @@ async def complete_consultation(
     # ── Step 6: Publish consultation.completed event ─────────
     # Queue removal, notification, and activity logging happen
     # asynchronously via RabbitMQ consumers on each service.
-    await rabbitmq.publish_event(
+    event_published = await rabbitmq.publish_event(
         "consultation.completed",
         {
             "appointment_id": body.appointment_id,
@@ -133,11 +133,15 @@ async def complete_consultation(
         },
     )
 
+    message = "Consultation completed successfully"
+    if not event_published:
+        message += " (warning: queue/notification update may be delayed — event bus temporarily unavailable)"
+
     return ConsultationResponse(
         appointment_id=body.appointment_id,
         patient_id=body.patient_id,
         doctor_id=body.doctor_id,
         status="completed",
         payment_link=payment_link,
-        message="Consultation completed successfully",
+        message=message,
     )
