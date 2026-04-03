@@ -63,3 +63,14 @@ async def mark_slot_booked(slot_id: str, token: str) -> None:
     """Mark a time slot as booked via doctor-service."""
     await _call("patch", f"/api/doctors/slots/{slot_id}", token,
                 base_url=settings.DOCTOR_SERVICE_URL, json={"status": "booked"})
+
+
+async def release_slot(doctor_id: str, start_time: str, token: str) -> None:
+    """Release the time slot matching a cancelled specific-doctor appointment.
+
+    Finds the slot by doctor_id + start_time and marks it available again.
+    Failures are logged but do not block the cancellation.
+    """
+    await _call("patch", f"/api/doctors/slots/release", token,
+                base_url=settings.DOCTOR_SERVICE_URL,
+                json={"doctor_id": doctor_id, "start_time": start_time})

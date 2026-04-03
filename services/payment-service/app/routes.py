@@ -1,13 +1,36 @@
 import httpx
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from app.auth import require_auth
 from app.db import get_pool
 from app.config import settings
 
-router = APIRouter(prefix="/api/payments")
+
+class PaymentRecord(BaseModel):
+    id: str
+    consultation_id: str
+    patient_id: str
+    payment_intent_id: Optional[str] = None
+    status: str  # pending | paid | failed
+    payment_link: Optional[str] = None
+    created_at: datetime
 
 
-@router.get("/consultation/{consultation_id}")
+class RefreshLinkResponse(BaseModel):
+    payment_link: str
+
+
+router = APIRouter(prefix="/api/payments", tags=["Payments"])
+
+
+@router.get(
+    "/consultation/{consultation_id}",
+    response_model=list[PaymentRecord],
+    summary="Get payment history for a consultation",
+    responses={404: {"description": "No payment records found"}},
+)
 async def get_payment_history(consultation_id: str, caller_id: str = Depends(require_auth)):
     """Return all payment attempts for a consultation, newest first."""
     pool = await get_pool()
@@ -26,7 +49,16 @@ async def get_payment_history(consultation_id: str, caller_id: str = Depends(req
     return [dict(r) for r in rows]
 
 
-@router.post("/consultation/{consultation_id}/refresh")
+@router.post(
+    "/consultation/{consultation_id}/refresh",
+    response_model=RefreshLinkResponse,
+    summary="Refresh an expired payment link",
+    responses={
+        400: {"description": "Payment already completed"},
+        404: {"description": "No payment record found"},
+        502: {"description": "Stripe service unavailable"},
+    },
+)
 async def refresh_payment_link(consultation_id: str, caller_id: str = Depends(require_auth)):
     """Create a new Stripe checkout session and update the stored payment_link."""
     pool = await get_pool()
@@ -63,7 +95,12 @@ async def refresh_payment_link(consultation_id: str, caller_id: str = Depends(re
 
     return {"payment_link": new_link}
 
-@router.get("/patient/{patient_id}")
+@router.get(
+    "/patient/{patient_id}",
+    response_model=list[PaymentRecord],
+    summary="Get payment history for a patient",
+    responses={404: {"description": "No payment records found"}},
+)
 async def get_patient_payment_history(patient_id: str, caller_id: str = Depends(require_auth)):
     """Return all payment attempts for a patient, newest first."""
     pool = await get_pool()

@@ -105,3 +105,19 @@ export async function updateSlotStatus(slot_id: string, status: string): Promise
     }
     return rows[0] as TimeSlot;
 }
+
+/**
+ * Release a time slot back to "available" by doctor_id + start_time.
+ * Used when a specific-doctor appointment is cancelled so the slot can be re-booked.
+ * Returns the updated slot or null if no matching booked slot was found.
+ */
+export async function releaseSlotByTime(doctor_id: string, start_time: string): Promise<TimeSlot | null> {
+    const { rows } = await pool.query(
+        `UPDATE doctors.time_slots
+         SET status = 'available'
+         WHERE doctor_id = $1 AND start_time = $2 AND status = 'booked'
+         RETURNING *`,
+        [doctor_id, start_time]
+    );
+    return rows[0] as TimeSlot | null;
+}

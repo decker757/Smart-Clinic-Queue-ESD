@@ -53,6 +53,26 @@ router.post("/:id/slots/generate", async (req: Request, res: Response) => {
     }
 });
 
+// PATCH /api/doctors/slots/release — release a slot by doctor_id + start_time (called on cancellation)
+// Must be registered BEFORE /slots/:slot_id so Express doesn't match "release" as a slot_id.
+router.patch("/slots/release", async (req: Request, res: Response) => {
+    try {
+        const { doctor_id, start_time } = req.body;
+        if (!doctor_id || !start_time) {
+            res.status(400).json({ error: "doctor_id and start_time are required" });
+            return;
+        }
+        const slot = await DoctorService.releaseSlotByTime(doctor_id, start_time);
+        if (!slot) {
+            res.json({ message: "No booked slot found to release" });
+            return;
+        }
+        res.json(slot);
+    } catch {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // PATCH /api/doctors/slots/:slot_id — mark slot booked/available (called by Appointment Service)
 router.patch("/slots/:slot_id", async (req: Request, res: Response) => {
     try {

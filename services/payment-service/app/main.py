@@ -23,6 +23,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Payment Service",
+    description="Records and queries payment history for consultations. "
+    "Consumes payment.completed / payment.failed events from the Stripe wrapper via RabbitMQ.",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/api/payments/docs",

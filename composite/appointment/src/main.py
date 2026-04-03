@@ -165,9 +165,24 @@ async def cancel_appointment(
 
     appt = await appointment_service.cancel_appointment(appointment_id, auth_ctx.token)
 
+    # Release the doctor's time slot if this was a specific-doctor booking
+    if existing.doctor_id and existing.start_time:
+        try:
+            await appointment_service.release_slot(
+                existing.doctor_id,
+                existing.start_time.isoformat() if hasattr(existing.start_time, "isoformat") else str(existing.start_time),
+                auth_ctx.token,
+            )
+        except Exception as e:
+            # Non-critical: log but don't block the cancellation
+            import logging
+            logging.warning(f"Could not release slot for cancelled appointment {appointment_id}: {e}")
+
     await publish_event("appointment.cancelled", {
         "appointment_id": appointment_id,
         "patient_id": appt.patient_id,
+        "doctor_id": appt.doctor_id,
+        "start_time": appt.start_time.isoformat() if appt.start_time else None,
     })
 
     return appt
