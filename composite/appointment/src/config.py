@@ -9,6 +9,7 @@ class Settings:
     AUTH_SERVICE_URL: str = os.getenv("AUTH_SERVICE_URL", "http://auth-service:3000")
     JWKS_URL: str = os.getenv("JWKS_URL", "http://auth-service:3000/api/auth/jwks")
     RABBITMQ_URL: str = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672")
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379")
     PORT: int = int(os.getenv("PORT", 8000))
 
 settings = Settings()

@@ -33,13 +33,30 @@ JWT=$(curl -sf "$BASE_AUTH/api/auth/token" \
 echo "JWT acquired."
 
 echo ""
-echo "=== 4. Book generic morning slot ==="
+echo "=== 4. Book generic morning slot (with idempotency key) ==="
+IDEM_KEY="test-idempotency-$(date +%s)"
 MORNING=$(curl -sf -X POST "$BASE_COMPOSITE" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $JWT" \
+  -H "X-Idempotency-Key: $IDEM_KEY" \
   -d "{\"patient_id\":\"$USER_ID\",\"session\":\"morning\",\"notes\":\"Headache\"}")
 echo "$MORNING" | jq .
 MORNING_ID=$(echo "$MORNING" | jq -r '.id')
+
+echo ""
+echo "=== 4b. Idempotency — replay exact same request with same key ==="
+REPLAY=$(curl -sf -X POST "$BASE_COMPOSITE" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -H "X-Idempotency-Key: $IDEM_KEY" \
+  -d "{\"patient_id\":\"$USER_ID\",\"session\":\"morning\",\"notes\":\"Headache\"}")
+REPLAY_ID=$(echo "$REPLAY" | jq -r '.id')
+
+if [ "$MORNING_ID" = "$REPLAY_ID" ]; then
+  echo "  ✓ Idempotency: replay returned same appointment ($MORNING_ID)"
+else
+  echo "  ✗ FAIL: Idempotency broken — original=$MORNING_ID, replay=$REPLAY_ID"
+fi
 
 echo ""
 echo "=== 5. Book generic afternoon slot ==="

@@ -203,6 +203,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   checkin-orchestrator:

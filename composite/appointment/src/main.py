@@ -13,6 +13,7 @@ from src.models.appointment import (
     AppointmentResponse,
 )
 from src.services import auth, appointment as appointment_service
+from src.redis_client import get_idempotency, set_idempotency
 
 app = FastAPI(
     title="Appointment Composite Service",
@@ -21,10 +22,6 @@ app = FastAPI(
     openapi_url="/api/composite/appointments/openapi.json",
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# In-memory idempotency cache: key → serialised AppointmentResponse dict
-# Prevents duplicate appointment creation when clients retry on network failures.
-_idempotency_cache: dict[str, dict] = {}
 
 
 # ─── Auth dependency ──────────────────────────────────────────────────────────
@@ -101,8 +98,10 @@ async def create_appointment(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     # Return cached response for duplicate requests (client retry after network failure)
-    if x_idempotency_key and x_idempotency_key in _idempotency_cache:
-        return _idempotency_cache[x_idempotency_key]
+    if x_idempotency_key:
+        cached = await get_idempotency(x_idempotency_key)
+        if cached:
+            return cached
 
     appt = await appointment_service.create_appointment(
         AppointmentServiceRequest(**body.model_dump(exclude={"slot_id"})),
@@ -137,7 +136,7 @@ async def create_appointment(
         await publish_event("appointment.booked", event_payload)
 
     if x_idempotency_key:
-        _idempotency_cache[x_idempotency_key] = appt.model_dump(mode="json")
+        await set_idempotency(x_idempotency_key, appt.model_dump(mode="json"))
 
     return appt
 
