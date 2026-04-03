@@ -8,6 +8,10 @@ logger = logging.getLogger(__name__)
 
 EXCHANGE = "clinic.events"
 
+# Dead-letter exchange: failed messages go here for inspection/replay
+DLX = "clinic.events.dlx"
+DLQ = "payment-service.events.dlq"
+
 
 async def _record_payment(status: str, payload: dict):
     pool = await get_pool()
@@ -31,22 +35,33 @@ async def start_consumer():
     connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
     channel = await connection.channel()
     exchange = await channel.declare_exchange(EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True)
-    queue = await channel.declare_queue("payment-service.events", durable=True)
+
+    # Declare DLX and DLQ
+    dlx = await channel.declare_exchange(DLX, aio_pika.ExchangeType.TOPIC, durable=True)
+    dlq = await channel.declare_queue(DLQ, durable=True)
+    await dlq.bind(dlx, routing_key="#")
+
+    queue = await channel.declare_queue(
+        "payment-service.events",
+        durable=True,
+        arguments={"x-dead-letter-exchange": DLX},
+    )
     await queue.bind(exchange, routing_key="payment.pending")
     await queue.bind(exchange, routing_key="payment.completed")
     await queue.bind(exchange, routing_key="payment.failed")
 
     async with queue.iterator() as messages:
         async for message in messages:
-            async with message.process():
-                try:
-                    payload = json.loads(message.body)
-                    routing_key = message.routing_key
-                    if routing_key == "payment.pending":
-                        await _record_payment("pending", payload)
-                    elif routing_key == "payment.completed":
-                        await _record_payment("paid", payload)
-                    elif routing_key == "payment.failed":
-                        await _record_payment("failed", payload)
-                except Exception:
-                    logger.exception("Failed to process payment event")
+            try:
+                payload = json.loads(message.body)
+                routing_key = message.routing_key
+                if routing_key == "payment.pending":
+                    await _record_payment("pending", payload)
+                elif routing_key == "payment.completed":
+                    await _record_payment("paid", payload)
+                elif routing_key == "payment.failed":
+                    await _record_payment("failed", payload)
+                await message.ack()
+            except Exception:
+                logger.exception("Failed to process payment event — sending to DLQ")
+                await message.nack(requeue=False)

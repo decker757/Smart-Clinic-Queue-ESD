@@ -36,7 +36,20 @@ async function setupConsumer(url: string): Promise<void> {
     const channel = await connection.createChannel();
 
     await channel.assertExchange(EXCHANGE, "topic", { durable: true });
-    await channel.assertQueue(QUEUE_NAME, { durable: true });
+
+    // Dead-letter exchange: failed messages go here for inspection/replay
+    const DLX = "clinic.events.dlx";
+    const DLQ = `${QUEUE_NAME}.dlq`;
+    await channel.assertExchange(DLX, "topic", { durable: true });
+    await channel.assertQueue(DLQ, { durable: true });
+    await channel.bindQueue(DLQ, DLX, "#");
+
+    await channel.assertQueue(QUEUE_NAME, {
+        durable: true,
+        arguments: {
+            "x-dead-letter-exchange": DLX,
+        },
+    });
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "appointment.booked");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "appointment.cancelled");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "consultation.completed");

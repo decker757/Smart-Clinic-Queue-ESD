@@ -31,8 +31,21 @@ export async function startConsumer(): Promise<void> {
     const connection = await amqp.connect(url);
     const channel = await connection.createChannel();
 
-    await channel.assertExchange(EXCHANGE, "topic", { durable: true});
-    await channel.assertQueue(QUEUE_NAME, { durable: true });
+    await channel.assertExchange(EXCHANGE, "topic", { durable: true });
+
+    // Dead-letter exchange: failed messages go here for inspection/replay
+    const DLX = "clinic.events.dlx";
+    const DLQ = `${QUEUE_NAME}.dlq`;
+    await channel.assertExchange(DLX, "topic", { durable: true });
+    await channel.assertQueue(DLQ, { durable: true });
+    await channel.bindQueue(DLQ, DLX, "#");
+
+    await channel.assertQueue(QUEUE_NAME, {
+        durable: true,
+        arguments: {
+            "x-dead-letter-exchange": DLX,
+        },
+    });
     
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "appointment.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.*");
