@@ -32,7 +32,7 @@ type jwksResponse struct {
 func FetchPublicKey() (*rsa.PublicKey, error) {
 	url := os.Getenv("JWKS_URL")
 	if url == "" {
-		url = "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json"
+		url = "http://auth-service:3000/api/auth/jwks"
 	}
 	resp, err := http.Get(url)
 	if err != nil {

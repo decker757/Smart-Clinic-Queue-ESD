@@ -5,7 +5,7 @@ import * as crypto from "crypto";
 let publicKey: crypto.KeyObject | null = null;
 
 export async function fetchPublicKey(retries = 10, delayMs = 3000): Promise<void> {
-    const url = process.env.JWKS_URL ?? "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json";
+    const url = process.env.JWKS_URL ?? "http://auth-service:3000/api/auth/jwks";
 
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
