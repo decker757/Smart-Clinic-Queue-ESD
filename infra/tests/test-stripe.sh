@@ -129,17 +129,15 @@ curl -sf -X POST "$BASE/webhook" \
 # Expected: {"status": "ok"} — silently ignored
 
 echo ""
-echo "=== 7. gRPC: CreatePayment (requires valid STRIPE_API_KEY) ==="
+echo "=== 7. gRPC: CreatePaymentRequest (requires valid STRIPE_API_KEY) ==="
 grpcurl -plaintext \
   -proto "$PROTO" \
   -d "{
     \"patient_id\": \"$PATIENT_ID\",
-    \"amount\": 2500,
-    \"currency\": \"sgd\",
-    \"consultation_id\": \"$CONSULTATION_ID\"
+    \"appointment_id\": \"$CONSULTATION_ID\"
   }" \
-  "$GRPC" payment.PaymentService/CreatePayment | jq .
-# Expected: {"paymentUrl": "https://checkout.stripe.com/...", "status": "pending"}
+  "$GRPC" payment.PaymentService/CreatePaymentRequest | jq .
+# Expected: {"paymentId": "...", "paymentLink": "https://checkout.stripe.com/..."}
 # Note: requires a valid test STRIPE_API_KEY — will return gRPC INTERNAL error if key is invalid
 
 echo ""
