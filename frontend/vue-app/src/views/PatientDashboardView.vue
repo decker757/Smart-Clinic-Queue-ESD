@@ -121,6 +121,7 @@ const modalLoading = ref(false)
 const modalError = ref('')
 const showCancelModal = ref(false)
 const cancellingAppt = ref(false)
+const lateEtaMinutes = ref(null)
 
 async function confirmCancelAppointment() {
   if (!appointment.value) return
@@ -155,6 +156,7 @@ function closeModals() {
   showLateModal.value = false
   modalLoading.value = false
   modalError.value = ''
+  lateEtaMinutes.value = null
 }
 
 function getAppointmentTime(appt) {
@@ -191,6 +193,7 @@ async function handleOnMyWayConfirm() {
       patientLocation,
     })
     if (result.status === 'late') {
+      lateEtaMinutes.value = result.eta_minutes ?? null
       showOnMyWayModal.value = false
       showLateModal.value = true
     } else {
@@ -211,7 +214,12 @@ async function handleLateConfirm(isComing) {
   modalLoading.value = true
   modalError.value = ''
   try {
-    await confirmCheckIn({ patientId: authStore.user.id, appointmentId: appointment.value.id, isComing })
+    await confirmCheckIn({
+      patientId: authStore.user.id,
+      appointmentId: appointment.value.id,
+      isComing,
+      etaMinutes: lateEtaMinutes.value,
+    })
     closeModals()
     if (!isComing) {
       // Patient cancelled — remove appointment from view

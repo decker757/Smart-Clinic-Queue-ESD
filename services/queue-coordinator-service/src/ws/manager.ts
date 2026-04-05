@@ -81,7 +81,7 @@ patientWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
             const { rows } = await pool.query(`
                 SELECT e.*,
                     (SELECT COUNT(*) FROM queue.queue_entries a
-                     WHERE a.queue_number < e.queue_number
+                     WHERE COALESCE(a.sort_key, a.queue_number * 1000) < COALESCE(e.sort_key, e.queue_number * 1000)
                        AND a.status NOT IN ('done', 'cancelled')
                        AND (
                          (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
@@ -215,7 +215,7 @@ async function getActiveQueueWithEta() {
     const { rows } = await pool.query(`
         SELECT e.*,
             (SELECT COUNT(*) FROM queue.queue_entries a
-             WHERE a.queue_number < e.queue_number
+             WHERE COALESCE(a.sort_key, a.queue_number * 1000) < COALESCE(e.sort_key, e.queue_number * 1000)
                AND a.status NOT IN ('done', 'cancelled')
                AND (
                  (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
@@ -226,7 +226,7 @@ async function getActiveQueueWithEta() {
             e.approaching_notified_at
         FROM queue.queue_entries e
         WHERE e.status NOT IN ('done', 'cancelled')
-        ORDER BY e.queue_number ASC
+        ORDER BY COALESCE(e.sort_key, e.queue_number * 1000) ASC, e.queue_number ASC
     `);
     for (const row of rows) {
         if (!row.estimated_time) {

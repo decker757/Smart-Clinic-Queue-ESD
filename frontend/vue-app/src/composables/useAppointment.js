@@ -250,11 +250,16 @@ export function useAppointment() {
   /**
    * Confirms late check-in: patient indicates whether they are still coming.
    */
-  async function confirmCheckIn({ patientId, appointmentId, isComing }) {
+  async function confirmCheckIn({ patientId, appointmentId, isComing, etaMinutes = null }) {
     const res = await fetch(`${API_BASE}/api/check-in/confirm`, {
       method: 'POST',
       headers: { ...authHeaders(authStore.jwt), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patient_id: patientId, appointment_id: appointmentId, is_coming: isComing }),
+      body: JSON.stringify({
+        patient_id: patientId,
+        appointment_id: appointmentId,
+        is_coming: isComing,
+        eta_minutes: etaMinutes,
+      }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))

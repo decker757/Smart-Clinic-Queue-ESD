@@ -1,6 +1,6 @@
 -- Full schema for Smart Clinic Queue system.
 -- Run once against a fresh Supabase database.
--- Consolidates migrations 001–009.
+-- Consolidates migrations 001–011.
 
 -- ─── BetterAuth ──────────────────────────────────────────────────────────────
 -- Add role column to BetterAuth users table (created by BetterAuth on first run)

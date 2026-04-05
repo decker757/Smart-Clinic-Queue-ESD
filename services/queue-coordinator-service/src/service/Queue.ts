@@ -81,9 +81,14 @@ export async function getQueuePosition(appointment_id: string, callerId?: string
         }
 
         const response = await pool.query(`
-            SELECT e.queue_number, e.sort_key, e.estimated_time, e.status, e.doctor_id, e.session,
+            SELECT e.queue_number,
+                   COALESCE(e.sort_key, e.queue_number * 1000) AS sort_key,
+                   e.estimated_time,
+                   e.status,
+                   e.doctor_id,
+                   e.session,
                    (SELECT COUNT(*) FROM queue.queue_entries a
-                    WHERE a.sort_key < e.sort_key
+                    WHERE COALESCE(a.sort_key, a.queue_number * 1000) < COALESCE(e.sort_key, e.queue_number * 1000)
                       AND a.status NOT IN ('done', 'cancelled')
                       AND (
                         (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
@@ -239,14 +244,16 @@ export async function deprioritize(appointment_id: string, travel_eta_minutes: n
 
             // All active generic entries for this session ordered by sort_key
             const { rows: peers } = await pool.query(`
-                SELECT sort_key FROM queue.queue_entries
+                SELECT COALESCE(sort_key, queue_number * 1000) AS sort_key
+                FROM queue.queue_entries
                 WHERE session = $1
                   AND doctor_id IS NULL
                   AND status NOT IN ('done', 'cancelled')
-                ORDER BY sort_key ASC
+                ORDER BY COALESCE(sort_key, queue_number * 1000) ASC, queue_number ASC
             `, [current.session]);
 
-            const currentPos = peers.findIndex((r: any) => Number(r.sort_key) === Number(current.sort_key));
+            const currentSortKey = Number(current.sort_key ?? (current.queue_number * 1000));
+            const currentPos = peers.findIndex((r: any) => Number(r.sort_key) === currentSortKey);
             const targetPos = Math.min(
                 currentPos === -1 ? peers.length - 1 : currentPos + slots_to_shift,
                 peers.length - 1
@@ -256,7 +263,7 @@ export async function deprioritize(appointment_id: string, travel_eta_minutes: n
             if (peers.length === 0 || targetPos >= peers.length - 1) {
                 // Place at end
                 const last = peers[peers.length - 1];
-                newSortKey = (last ? Number(last.sort_key) : Number(current.sort_key)) + 1000;
+                newSortKey = (last ? Number(last.sort_key) : currentSortKey) + 1000;
             } else {
                 const targetSortKey = Number(peers[targetPos].sort_key);
                 const nextSortKey   = Number(peers[targetPos + 1].sort_key);
@@ -374,7 +381,8 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
                   END ASC,
                   -- Within each tier: generic patients ordered by slot-band (sort_key);
                   -- specific patients ordered by sort_key which equals queue_number * 1000
-                  qe.sort_key ASC
+                  COALESCE(qe.sort_key, qe.queue_number * 1000) ASC,
+                  qe.queue_number ASC
                 LIMIT 1
             )
             RETURNING *
@@ -414,7 +422,7 @@ export async function listActiveQueue(): Promise<QueueEntry[]> {
     const { rows } = await pool.query(`
         SELECT * FROM queue.queue_entries
         WHERE status NOT IN ('done', 'cancelled')
-        ORDER BY queue_number ASC
+        ORDER BY COALESCE(sort_key, queue_number * 1000) ASC, queue_number ASC
     `);
     return rows as QueueEntry[];
 }

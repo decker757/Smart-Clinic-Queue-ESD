@@ -27,11 +27,13 @@ const options: swaggerJsdoc.Options = {
                         doctor_id: { type: "string" },
                         session: { type: "string", enum: ["morning", "afternoon"] },
                         queue_number: { type: "integer" },
+                        sort_key: { type: "integer" },
                         status: {
                             type: "string",
                             enum: ["waiting", "checked_in", "called", "in_progress", "done", "skipped", "cancelled"],
                         },
                         estimated_time: { type: "string", format: "date-time", nullable: true },
+                        estimated_arrival_at: { type: "string", format: "date-time", nullable: true },
                         created_at: { type: "string", format: "date-time" },
                         updated_at: { type: "string", format: "date-time" },
                     },
@@ -126,9 +128,22 @@ const options: swaggerJsdoc.Options = {
             },
             "/api/queue/deprioritize/{appointment_id}": {
                 post: {
-                    summary: "Move patient to back of queue (late arrival penalty)",
+                    summary: "Shift a late patient back using optional travel ETA",
                     tags: ["Queue"],
                     parameters: [{ in: "path", name: "appointment_id", required: true, schema: { type: "string" } }],
+                    requestBody: {
+                        required: false,
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        travel_eta_minutes: { type: "integer", minimum: 0 },
+                                    },
+                                },
+                            },
+                        },
+                    },
                     responses: {
                         "200": { description: "Deprioritized entry" },
                         "404": { description: "Appointment not in queue" },

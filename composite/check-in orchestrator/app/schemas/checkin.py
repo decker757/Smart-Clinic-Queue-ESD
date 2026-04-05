@@ -23,3 +23,4 @@ class ConfirmRequest(BaseModel):
     patient_id: str
     appointment_id: str
     is_coming: bool
+    eta_minutes: Optional[int] = None
