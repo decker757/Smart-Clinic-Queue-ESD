@@ -195,6 +195,22 @@ aws cognito-idp admin-set-user-password \
   --permanent
 ```
 
+### Local Docker demo accounts
+
+When running locally with Docker Compose, seed test accounts by running:
+
+```bash
+sh infra/scripts/seed-users.sh
+```
+
+| Role | Email | Password |
+|------|-------|----------|
+| Doctor | `doctor@clinic.com` | `password123` |
+| Staff | `staff@clinic.com` | `password123` |
+| Patient | `patient@clinic.com` | `password123` |
+
+The seed script also inserts the doctor into the `doctors.doctors` and `appointments.doctors` tables so booking and consultation flows work out of the box.
+
 ## Scenarios
 
 ### Scenario 1 — Patient Books Appointment

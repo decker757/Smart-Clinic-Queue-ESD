@@ -194,6 +194,9 @@ services:
           - /api/activity-log
         strip_path: false
 
+  # Note: Kong service name uses "check-in-orchestrator" while the Docker
+  # container is "checkin-orchestrator". The URL resolves correctly via
+  # $CHECKIN_ORCHESTRATOR_URL (set in docker-compose.yml).
   - name: check-in-orchestrator
     url: $CHECKIN_ORCHESTRATOR_URL
     plugins:
