@@ -3,7 +3,7 @@
 # Requires: auth-service (3000), composite-appointment (8080), queue-coordinator-service (3002), rabbitmq
 # Run from repo root: sh infra/tests/test-queue.sh
 
-set -e
+set -eu
 
 BASE_AUTH="http://localhost:3000"
 BASE_COMPOSITE="http://localhost:8080/api"
@@ -32,6 +32,12 @@ req() {
   fi
   echo "[HTTP $CODE]"
   rm -f "$TMPFILE"
+}
+
+# POST and return a single JSON field from the response body
+req_post_field() {
+  FIELD="$1"; shift
+  curl -sf -X POST "$@" | jq -r ".$FIELD // empty"
 }
 
 check_code() {
@@ -238,6 +244,132 @@ echo ""
 echo "=== 25. Get queue position after reset — expect 404 ==="
 CODE=$(req_code "$BASE_QUEUE/position/$APPT3_ID")
 check_code "$CODE" "404" "Queue position after reset returns 404"
+
+# ─── Deprioritize: slot-band shift ordering ──────────────────
+# Verify that a late generic patient is shifted back by ceil(eta/15) slot bands
+# rather than pushed to the very end, and that queue_number (display) is unchanged.
+
+echo ""
+echo "=== 26. Reset queue for deprioritize ordering tests ==="
+CODE=$(req_code -X POST "$BASE_QUEUE/reset")
+check_code "$CODE" "200" "Queue reset for deprioritize tests"
+
+echo ""
+echo "=== 27. Book 3 generic morning appointments (DA, DB, DC) ==="
+DA=$(curl -sf -X POST "$BASE_COMPOSITE/composite/appointments" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d "{\"patient_id\":\"$USER_ID\",\"session\":\"morning\",\"notes\":\"Deprioritize test A\"}")
+DA_ID=$(echo "$DA" | jq -r '.id')
+DB=$(curl -sf -X POST "$BASE_COMPOSITE/composite/appointments" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d "{\"patient_id\":\"$USER_ID\",\"session\":\"morning\",\"notes\":\"Deprioritize test B\"}")
+DB_ID=$(echo "$DB" | jq -r '.id')
+DC=$(curl -sf -X POST "$BASE_COMPOSITE/composite/appointments" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d "{\"patient_id\":\"$USER_ID\",\"session\":\"morning\",\"notes\":\"Deprioritize test C\"}")
+DC_ID=$(echo "$DC" | jq -r '.id')
+if [ -n "$DA_ID" ] && [ "$DA_ID" != "null" ] && \
+   [ -n "$DB_ID" ] && [ "$DB_ID" != "null" ] && \
+   [ -n "$DC_ID" ] && [ "$DC_ID" != "null" ]; then
+  pass "Booked DA=$DA_ID, DB=$DB_ID, DC=$DC_ID"
+else
+  fail "Failed to book one or more deprioritize test appointments"
+fi
+
+echo ""
+echo "--- Waiting 2s for RabbitMQ consumer to process... ---"
+sleep 2
+
+echo ""
+echo "=== 28. Check in all 3 (DA, DB, DC) ==="
+CODE_DA=$(req_code -X POST "$BASE_QUEUE/checkin/$DA_ID")
+CODE_DB=$(req_code -X POST "$BASE_QUEUE/checkin/$DB_ID")
+CODE_DC=$(req_code -X POST "$BASE_QUEUE/checkin/$DC_ID")
+check_code "$CODE_DA" "200" "Check in DA"
+check_code "$CODE_DB" "200" "Check in DB"
+check_code "$CODE_DC" "200" "Check in DC"
+
+echo ""
+echo "=== 29. Deprioritize DA with 30 min ETA (ceil(30/15)=2 slots back → after DC) ==="
+CODE=$(req_code -X POST "$BASE_QUEUE/deprioritize/$DA_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"travel_eta_minutes":30}')
+check_code "$CODE" "200" "Deprioritize DA with 30 min ETA"
+
+echo ""
+echo "=== 30. Verify DA queue_number (display) is unchanged after deprioritize ==="
+DA_POS=$(curl -sf "$BASE_QUEUE/position/$DA_ID")
+DA_QNUM=$(echo "$DA_POS" | jq -r '.queue_number')
+# DA was booked first so queue_number should be 1
+if [ "$DA_QNUM" = "1" ]; then
+  pass "DA queue_number unchanged at $DA_QNUM (sort_key handles ordering, not queue_number)"
+else
+  fail "DA queue_number changed — expected 1, got $DA_QNUM"
+fi
+
+echo ""
+echo "=== 31. Call next — expect DB (DA shifted behind DB and DC) ==="
+CALLED=$(req_post_field "appointment_id" "$BASE_QUEUE/call-next" \
+  -H "Content-Type: application/json" \
+  -d '{"session":"morning"}')
+if [ "$CALLED" = "$DB_ID" ]; then
+  pass "Call next returned DB as expected"
+else
+  fail "Call next expected DB ($DB_ID), got $CALLED"
+fi
+
+echo ""
+echo "=== 32. Call next — expect DC ==="
+CALLED=$(req_post_field "appointment_id" "$BASE_QUEUE/call-next" \
+  -H "Content-Type: application/json" \
+  -d '{"session":"morning"}')
+if [ "$CALLED" = "$DC_ID" ]; then
+  pass "Call next returned DC as expected"
+else
+  fail "Call next expected DC ($DC_ID), got $CALLED"
+fi
+
+echo ""
+echo "=== 33. Call next — expect DA (shifted to after DC) ==="
+CALLED=$(req_post_field "appointment_id" "$BASE_QUEUE/call-next" \
+  -H "Content-Type: application/json" \
+  -d '{"session":"morning"}')
+if [ "$CALLED" = "$DA_ID" ]; then
+  pass "Call next returned DA as expected (slot-band shift worked)"
+else
+  fail "Call next expected DA ($DA_ID), got $CALLED"
+fi
+
+echo ""
+echo "=== 34. Deprioritize with missing travel_eta_minutes — should default to 1 slot shift ==="
+# Book and check in a fresh appointment, deprioritize without body param
+DD=$(curl -sf -X POST "$BASE_COMPOSITE/composite/appointments" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d "{\"patient_id\":\"$USER_ID\",\"session\":\"morning\",\"notes\":\"Deprioritize test D\"}")
+DD_ID=$(echo "$DD" | jq -r '.id')
+sleep 2
+CODE=$(req_code -X POST "$BASE_QUEUE/checkin/$DD_ID")
+check_code "$CODE" "200" "Check in DD"
+CODE=$(req_code -X POST "$BASE_QUEUE/deprioritize/$DD_ID" \
+  -H "Content-Type: application/json" \
+  -d '{}')
+check_code "$CODE" "200" "Deprioritize with no travel_eta_minutes defaults gracefully"
+
+echo ""
+echo "=== 35. Deprioritize non-existent appointment — expect 404 ==="
+CODE=$(req_code -X POST "$BASE_QUEUE/deprioritize/00000000-0000-0000-0000-000000000000" \
+  -H "Content-Type: application/json" \
+  -d '{"travel_eta_minutes":15}')
+check_code "$CODE" "404" "Deprioritize non-existent appointment returns 404"
+
+echo ""
+echo "=== 36. Reset queue ==="
+CODE=$(req_code -X POST "$BASE_QUEUE/reset")
+check_code "$CODE" "200" "Final queue reset"
 
 # ─── Summary ─────────────────────────────────────────────────
 
