@@ -57,9 +57,16 @@ CREATE TABLE IF NOT EXISTS queue.queue_entries (
     doctor_id      TEXT,
     session        TEXT        CHECK (session IN ('morning', 'afternoon')),
     queue_number   INT         NOT NULL,
+    -- sort_key drives callNext ordering; initialised to queue_number * 1000.
+    -- Wide spacing lets deprioritize() insert between entries without renumbering.
+    -- queue_number is display-only and never changes after assignment.
+    sort_key                 BIGINT      NOT NULL DEFAULT 0,
     status         TEXT        NOT NULL DEFAULT 'waiting'
                                CHECK (status IN ('waiting', 'checked_in', 'called', 'in_progress', 'done', 'skipped', 'cancelled')),
     estimated_time           TIMESTAMPTZ,
+    -- Set to NOW() on check-in; overridden for late specific-booking patients
+    -- so callNext withholds their tier-0 slot until they physically arrive.
+    estimated_arrival_at     TIMESTAMPTZ,
     approaching_notified_at  TIMESTAMPTZ,
     created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -73,6 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_queue_patient        ON queue.queue_entries(patie
 CREATE INDEX IF NOT EXISTS idx_queue_number         ON queue.queue_entries(queue_number);
 CREATE INDEX IF NOT EXISTS idx_queue_status_doctor  ON queue.queue_entries(status, doctor_id) WHERE doctor_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_queue_status_session ON queue.queue_entries(status, session)    WHERE session IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_queue_sort_key       ON queue.queue_entries(sort_key);
 
 -- ─── Activity Log ────────────────────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS activity_log;

@@ -110,7 +110,10 @@ async function setupConsumer(url: string): Promise<void> {
 
             } else if (routingKey === "queue.deprioritized") {
                 try {
-                    const entry = await QueueService.deprioritize(content.appointment_id);
+                    const entry = await QueueService.deprioritize(
+                        content.appointment_id,
+                        content.travel_eta_minutes ?? 0,
+                    );
                     broadcastQueueUpdate(entry.appointment_id, entry);
                     broadcastAllPatientPositions().catch(() => {});
                     console.log(`[Queue] Deprioritized appointment ${content.appointment_id}`);
