@@ -240,6 +240,7 @@ Both use `token` as a query parameter because browsers cannot set custom headers
 ## Database
 
 Run `infra/migrations/schema.sql` against a fresh PostgreSQL database.
+For local Docker, the `app-db` container auto-loads this schema on a fresh volume.
 
 | Schema | Used by |
 |--------|---------|
@@ -581,6 +582,8 @@ cp infra/env/auth.env.example infra/env/auth.env
 cd infra
 docker compose up --build
 ```
+
+On a fresh local Docker volume, Postgres auto-loads `infra/migrations/schema.sql`.
 
 ### 4. Forward Stripe webhooks (for payment testing)
 

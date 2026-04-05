@@ -5,7 +5,7 @@
 # Requires (all via docker compose):
 #   stripe-service → localhost:8086  (HTTP webhook)
 #                  → localhost:50052 (gRPC)
-#   rabbitmq       → localhost:15672 (management API for event verification)
+#   rabbitmq       → localhost:15673 (management API for event verification)
 #
 # Start stack:
 #   cd infra && docker compose up -d stripe-service rabbitmq
@@ -152,7 +152,7 @@ echo ""
 echo "=== 9. Verify RabbitMQ received payment.completed event ==="
 # Uses RabbitMQ management API (guest:guest) — requires rabbitmq with management plugin
 MSG_COUNT=$(curl -sf -u guest:guest \
-  "http://localhost:15672/api/exchanges/%2F/clinic.events/bindings/source" 2>/dev/null | jq 'length' 2>/dev/null || echo "unavailable")
+  "http://localhost:15673/api/exchanges/%2F/clinic.events/bindings/source" 2>/dev/null | jq 'length' 2>/dev/null || echo "unavailable")
 echo "clinic.events bindings: $MSG_COUNT (management API check)"
 # For deeper verification check docker logs:
 echo "--- stripe-service logs (last 10 lines) ---"

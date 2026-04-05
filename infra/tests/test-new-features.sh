@@ -120,7 +120,7 @@ check_code "$PAYMENT_CODE" "404" "Payment Service Pydantic response models"
 
 # Step 10: Verify RabbitMQ payment binding
 echo "=== 10. Verify RabbitMQ payment.* binding ==="
-RABBITMQ_BINDINGS=$(req_json "http://localhost:15672/api/exchanges/%2F/clinic.events/bindings/source" -u guest:guest 2>/dev/null)
+RABBITMQ_BINDINGS=$(req_json "http://localhost:15673/api/exchanges/%2F/clinic.events/bindings/source" -u guest:guest 2>/dev/null)
 PAYMENT_BINDING=$(echo "$RABBITMQ_BINDINGS" | jq 'map(select(.routing_key | startswith("payment."))) | length')
 if [ "$PAYMENT_BINDING" -gt 0 ]; then
     echo "  ✓ Found $PAYMENT_BINDING payment.* bindings"

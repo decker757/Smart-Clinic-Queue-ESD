@@ -35,8 +35,8 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
-      - "5672:5672"    # AMQP
-      - "15672:15672"  # management UI
+      - "5673:5672"    # AMQP (host-side offset avoids collisions with other local RabbitMQ instances)
+      - "15673:15672"  # management UI (host-side offset avoids collisions with other local RabbitMQ instances)
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -44,8 +44,9 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 15s
+      start_period: 20s
       retries: 5
 
   # ─── Cache ──────────────────────────────────────────────────
@@ -68,6 +69,7 @@ services:
       POSTGRES_DB: clinic
     volumes:
       - app-db-data:/var/lib/postgresql/data
+      - ./migrations/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "app", "-d", "clinic"]
       interval: 5s
@@ -84,7 +86,7 @@ services:
     env_file:
       - ./env/auth.env
     depends_on:
-      rabbitmq:
+      app-db:
         condition: service_healthy
     restart: unless-stopped
 
@@ -215,6 +217,14 @@ services:
       - "8085:8000"  # HOST_PORT:CONTAINER_PORT
     env_file:
       - ./env/checkin-orchestrator.env
+    depends_on:
+      auth-service:
+        condition: service_started
+      eta-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
   composite-patient-orchestrator:
     build:
