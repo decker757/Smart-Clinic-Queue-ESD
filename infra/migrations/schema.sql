@@ -273,10 +273,16 @@ CREATE TABLE IF NOT EXISTS payments.payments (
     consultation_id   TEXT        NOT NULL,
     patient_id        TEXT        NOT NULL,
     payment_intent_id TEXT,
+    amount_cents      INT,
+    currency          TEXT        DEFAULT 'sgd',
     status            TEXT        NOT NULL,  -- 'pending' | 'paid' | 'failed'
     payment_link      TEXT,
     created_at        TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE payments.payments
+    ADD COLUMN IF NOT EXISTS amount_cents INT,
+    ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'sgd';
 
 CREATE INDEX IF NOT EXISTS idx_payments_consultation ON payments.payments(consultation_id);
 CREATE INDEX IF NOT EXISTS idx_payments_patient      ON payments.payments(patient_id);

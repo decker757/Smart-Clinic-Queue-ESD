@@ -102,6 +102,7 @@ services:
             - "*"
           methods:
             - GET
+            - POST
             - OPTIONS
           headers:
             - Authorization
@@ -243,6 +244,26 @@ services:
       - name: payment-route
         paths:
           - /api/payments
+        strip_path: false
+
+  - name: stripe-service
+    url: $STRIPE_SERVICE_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - POST
+            - OPTIONS
+          headers:
+            - Content-Type
+            - Stripe-Signature
+          preflight_continue: false
+    routes:
+      - name: stripe-webhook-route
+        paths:
+          - /api/payments/webhook
         strip_path: false
 
   - name: queue-coordinator-service

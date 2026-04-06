@@ -69,6 +69,25 @@ check_field() {
   else fail "$LABEL (got '$VALUE', expected '$EXPECTED')"; fi
 }
 
+wait_for_code() {
+  URL=$1
+  JWT=$2
+  EXPECTED=$3
+  LABEL=$4
+  CODE="000"
+
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" \
+      -H "Authorization: Bearer $JWT")
+    if [ "$CODE" = "$EXPECTED" ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  [ "$CODE" = "$EXPECTED" ] || fail "$LABEL (last HTTP $CODE)"
+}
+
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║     CONSULTATION E2E TEST (Scenario 3)   ║"
@@ -130,6 +149,10 @@ PATIENT_JWT=$(curl -sf "$BASE_AUTH/token" \
 pass "Patient created (patient_id=$PATIENT_ID)"
 
 echo ""
+echo "--- Waiting for Kong queue route readiness (max 30s) ---"
+wait_for_code "$KONG/api/queue/openapi.json" "$PATIENT_JWT" "200" "Kong/queue route ready"
+
+echo ""
 echo "--- Book appointment with doctor $DOCTOR_USER_ID ---"
 APPT=$(curl -sf -X POST "$KONG/api/composite/appointments" \
   -H "Content-Type: application/json" \
@@ -148,8 +171,13 @@ sleep 2
 echo ""
 echo "━━━ STEP 4: Verify queue entry ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-QUEUE_STATUS=$(curl -sf "$BASE_QUEUE/position/$APPT_ID" \
-  -H "Authorization: Bearer $PATIENT_JWT" | jq -r '.status')
+QUEUE_STATUS=""
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  QUEUE_STATUS=$(curl -s "$BASE_QUEUE/position/$APPT_ID" \
+    -H "Authorization: Bearer $PATIENT_JWT" | jq -r '.status // empty' 2>/dev/null || true)
+  [ "$QUEUE_STATUS" = "waiting" ] && break
+  sleep 1
+done
 check_field "$QUEUE_STATUS" "waiting" "Queue entry status = waiting"
 
 # ── 5. Check in patient (direct queue call — check-in orchestrator tested separately) ─

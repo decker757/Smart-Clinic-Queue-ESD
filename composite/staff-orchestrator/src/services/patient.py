@@ -2,19 +2,35 @@ import grpc.aio
 from src.proto import patient_pb2, patient_pb2_grpc
 from src.config import settings
 
-channel = grpc.aio.insecure_channel(settings.PATIENT_SERVICE_GRPC)
-stub = patient_pb2_grpc.PatientServiceStub(channel)
+
+def _channel():
+    return grpc.aio.insecure_channel(settings.PATIENT_SERVICE_GRPC)
 
 
 async def get_patient(patient_id: str):
-    return await stub.GetPatient(patient_pb2.GetPatientRequest(id=patient_id))
+    async with _channel() as channel:
+        stub = patient_pb2_grpc.PatientServiceStub(channel)
+        return await stub.GetPatient(
+            patient_pb2.GetPatientRequest(id=patient_id),
+            timeout=10,
+        )
 
 
 async def get_history(patient_id: str):
-    response = await stub.GetHistory(patient_pb2.GetHistoryRequest(patient_id=patient_id))
-    return response.entries
+    async with _channel() as channel:
+        stub = patient_pb2_grpc.PatientServiceStub(channel)
+        response = await stub.GetHistory(
+            patient_pb2.GetHistoryRequest(patient_id=patient_id),
+            timeout=10,
+        )
+        return response.entries
 
 
 async def get_memos(patient_id: str):
-    response = await stub.GetMemos(patient_pb2.GetMemosRequest(patient_id=patient_id))
-    return response.memos
+    async with _channel() as channel:
+        stub = patient_pb2_grpc.PatientServiceStub(channel)
+        response = await stub.GetMemos(
+            patient_pb2.GetMemosRequest(patient_id=patient_id),
+            timeout=10,
+        )
+        return response.memos

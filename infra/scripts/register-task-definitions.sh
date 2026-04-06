@@ -1,8 +1,8 @@
 #!/bin/sh
-# Register ECS task definitions for all services.
+# Register ECS task definitions for all backend ECS services.
 # Run from repo root: sh infra/scripts/register-task-definitions.sh
 #
-# Secrets are loaded from infra/scripts/.env.aws (gitignored).
+# Deployment config is loaded from infra/scripts/.env.aws (gitignored).
 # Copy env-aws.example → .env.aws and fill in your real values.
 
 set -e
@@ -19,10 +19,11 @@ fi
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 
-# Validate required secrets are set
-for var in DB_URL MQ_URL REDIS_URL BETTER_AUTH_SECRET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY \
-           GOOGLE_MAPS_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN STRIPE_API_KEY \
-           STRIPE_WEBHOOK_SIGNING_SECRET COGNITO_JWKS_URL; do
+# Validate required deployment config is set
+for var in AWS_ACCOUNT_ID AWS_REGION DB_URL MQ_URL REDIS_URL BETTER_AUTH_SECRET \
+           BETTER_AUTH_URL FRONTEND_BASE_URL AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY \
+           S3_BUCKET GOOGLE_MAPS_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN \
+           STRIPE_API_KEY STRIPE_WEBHOOK_SIGNING_SECRET COGNITO_JWKS_URL; do
     eval val=\$$var
     if [ -z "$val" ]; then
         echo "ERROR: $var is not set in .env.aws"
@@ -30,12 +31,22 @@ for var in DB_URL MQ_URL REDIS_URL BETTER_AUTH_SECRET AWS_ACCESS_KEY_ID AWS_SECR
     fi
 done
 
-ACCOUNT=617341601600
-REGION=ap-southeast-1
+ACCOUNT=$AWS_ACCOUNT_ID
+REGION=$AWS_REGION
 REGISTRY=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com
-EXEC_ROLE=arn:aws:iam::${ACCOUNT}:role/ecsTaskExecutionRole
-LOG_GROUP=/ecs/smart-clinic
-NS=smart-clinic.local
+EXEC_ROLE=${ECS_TASK_EXECUTION_ROLE_ARN:-arn:aws:iam::${ACCOUNT}:role/ecsTaskExecutionRole}
+LOG_GROUP=${CLOUDWATCH_LOG_GROUP:-/ecs/smart-clinic}
+NS=${CLOUD_MAP_NAMESPACE:-smart-clinic.local}
+STRIPE_SUCCESS_URL_VALUE=${STRIPE_SUCCESS_URL:-}
+STRIPE_CANCEL_URL_VALUE=${STRIPE_CANCEL_URL:-}
+
+if [ -z "$STRIPE_SUCCESS_URL_VALUE" ]; then
+    STRIPE_SUCCESS_URL_VALUE="$FRONTEND_BASE_URL/success?session_id={CHECKOUT_SESSION_ID}"
+fi
+
+if [ -z "$STRIPE_CANCEL_URL_VALUE" ]; then
+    STRIPE_CANCEL_URL_VALUE="$FRONTEND_BASE_URL/cancel"
+fi
 
 echo "Creating CloudWatch log group ${LOG_GROUP}..."
 aws logs create-log-group --log-group-name "$LOG_GROUP" --region "$REGION" 2>/dev/null || true
@@ -71,8 +82,8 @@ register auth-service <<EOF
     "environment": [
       {"name": "DATABASE_URL", "value": "$DB_URL"},
       {"name": "BETTER_AUTH_SECRET", "value": "$BETTER_AUTH_SECRET"},
-      {"name": "BETTER_AUTH_URL", "value": "http://auth-service.$NS:3000"},
-      {"name": "CORS_ORIGIN", "value": "*"},
+      {"name": "BETTER_AUTH_URL", "value": "$BETTER_AUTH_URL"},
+      {"name": "CORS_ORIGIN", "value": "$FRONTEND_BASE_URL"},
       {"name": "NODE_TLS_REJECT_UNAUTHORIZED", "value": "0"}
     ],
     "logConfiguration": $(log auth-service)
@@ -142,7 +153,7 @@ register patient-service <<EOF
       {"name": "DATABASE_URL", "value": "$DB_URL"},
       {"name": "PORT", "value": "3007"},
       {"name": "GRPC_PORT", "value": "50053"},
-      {"name": "AWS_REGION", "value": "ap-southeast-1"},
+      {"name": "AWS_REGION", "value": "$REGION"},
       {"name": "AWS_ACCESS_KEY_ID", "value": "$AWS_ACCESS_KEY_ID"},
       {"name": "AWS_SECRET_ACCESS_KEY", "value": "$AWS_SECRET_ACCESS_KEY"},
       {"name": "S3_BUCKET", "value": "$S3_BUCKET"},
@@ -291,7 +302,10 @@ register stripe-service <<EOF
       {"name": "STRIPE_API_KEY", "value": "$STRIPE_API_KEY"},
       {"name": "STRIPE_WEBHOOK_SIGNING_SECRET", "value": "$STRIPE_WEBHOOK_SIGNING_SECRET"},
       {"name": "RABBITMQ_URL", "value": "$MQ_URL"},
-      {"name": "FRONTEND_BASE_URL", "value": "http://smart-clinic-alb-2054248031.ap-southeast-1.elb.amazonaws.com"},
+      {"name": "AUTH_SERVICE_URL", "value": "http://auth-service.$NS:3000"},
+      {"name": "FRONTEND_BASE_URL", "value": "$FRONTEND_BASE_URL"},
+      {"name": "STRIPE_SUCCESS_URL", "value": "$STRIPE_SUCCESS_URL_VALUE"},
+      {"name": "STRIPE_CANCEL_URL", "value": "$STRIPE_CANCEL_URL_VALUE"},
       {"name": "CONSULTATION_FEE_CENTS", "value": "5000"},
       {"name": "CURRENCY", "value": "sgd"}
     ],
@@ -425,27 +439,7 @@ register checkin-orchestrator <<EOF
 }
 EOF
 
-# ─── frontend ─────────────────────────────────────────────────────────────────
-register frontend <<EOF
-{
-  "family": "frontend",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "256", "memory": "512",
-  "executionRoleArn": "$EXEC_ROLE",
-  "containerDefinitions": [{
-    "name": "frontend",
-    "image": "$REGISTRY/frontend",
-    "portMappings": [{"containerPort": 5173}],
-    "environment": [
-      {"name": "VITE_API_BASE_URL", "value": "http://TO_BE_FILLED_API_GATEWAY_URL"}
-    ],
-    "logConfiguration": $(log frontend)
-  }]
-}
-EOF
-
 rm -rf "$TMP"
 echo ""
-echo "All task definitions registered."
-echo "Next: set up Cloud Map namespace '$NS' and create ECS services."
+echo "All backend task definitions registered."
+echo "Next: ensure Cloud Map namespace '$NS' and ALB target groups exist, then create ECS services."

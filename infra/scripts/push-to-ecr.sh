@@ -1,11 +1,31 @@
 #!/bin/sh
-# Build and push all service images to ECR.
+# Build and push all backend service images to ECR.
 # Run from repo root: sh infra/scripts/push-to-ecr.sh
 
 set -e
 
-ACCOUNT=617341601600
-REGION=ap-southeast-1
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env.aws"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo "ERROR: $ENV_FILE not found."
+    echo "Copy env-aws.example to .env.aws and fill in your deployment config."
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+
+for var in AWS_ACCOUNT_ID AWS_REGION; do
+    eval val=\$$var
+    if [ -z "$val" ]; then
+        echo "ERROR: $var is not set in .env.aws"
+        exit 1
+    fi
+done
+
+ACCOUNT=$AWS_ACCOUNT_ID
+REGION=$AWS_REGION
 REGISTRY=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com
 
 echo "Authenticating with ECR..."
@@ -42,7 +62,7 @@ echo ""
 echo ">>> Building checkin-orchestrator..."
 docker build --platform linux/amd64 -t $REGISTRY/checkin-orchestrator "composite/check-in orchestrator"
 docker push $REGISTRY/checkin-orchestrator
-build_and_push frontend                      frontend/vue-app/Dockerfile.dev
 
 echo ""
-echo "All images pushed to ECR successfully."
+echo "All backend images pushed to ECR successfully."
+echo "Frontend is deployed separately via S3/CloudFront, not ECR/ECS."

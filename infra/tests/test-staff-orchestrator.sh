@@ -74,6 +74,24 @@ check_code() {
   fi
 }
 
+wait_for_code() {
+  URL=$1
+  JWT=$2
+  EXPECTED=$3
+  LABEL=$4
+  CODE="000"
+
+  for _ in $(seq 1 30); do
+    CODE=$(req_code "$URL" -H "Authorization: Bearer $JWT")
+    if [ "$CODE" = "$EXPECTED" ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  [ "$CODE" = "$EXPECTED" ] || fail "$LABEL (last HTTP $CODE)"
+}
+
 # ── 1. Auth ───────────────────────────────────────────────────────────────────
 
 echo ""
@@ -97,16 +115,11 @@ pass "JWT acquired"
 
 echo ""
 echo "--- Waiting for Kong staff route readiness (max 60s) ---"
-STAFF_READY_CODE="000"
-for _ in $(seq 1 30); do
-  STAFF_READY_CODE=$(req_code "$BASE_STAFF/doctors" \
-    -H "Authorization: Bearer $DOCTOR_JWT")
-  if [ "$STAFF_READY_CODE" = "200" ]; then
-    break
-  fi
-  sleep 2
-done
-[ "$STAFF_READY_CODE" = "200" ] || fail "Kong/staff route not ready (last HTTP $STAFF_READY_CODE)"
+wait_for_code "$BASE_STAFF/doctors" "$DOCTOR_JWT" "200" "Kong/staff route ready"
+
+echo ""
+echo "--- Waiting for Kong patient route readiness (max 60s) ---"
+wait_for_code "$BASE_KONG/api/patients/openapi.json" "$DOCTOR_JWT" "200" "Kong/patient route ready"
 
 # ── 2. Doctor endpoints ───────────────────────────────────────────────────────
 

@@ -1,6 +1,7 @@
 import httpx
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from app.auth import AuthContext, require_auth, require_staff
@@ -46,6 +47,14 @@ def _is_staff(auth: AuthContext) -> bool:
     return auth.role in {"staff", "doctor", "admin"}
 
 
+def _serialize_payment_record(row) -> dict:
+    record = dict(row)
+    for key, value in record.items():
+        if isinstance(value, UUID):
+            record[key] = str(value)
+    return record
+
+
 @router.get(
     "/consultation/{consultation_id}",
     response_model=list[PaymentRecord],
@@ -69,7 +78,7 @@ async def get_payment_history(consultation_id: str, auth: AuthContext = Depends(
         raise HTTPException(status_code=404, detail="No payment records found")
     if not _is_staff(auth) and rows[0]["patient_id"] != auth.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
-    return [dict(r) for r in rows]
+    return [_serialize_payment_record(r) for r in rows]
 
 
 @router.post(
@@ -162,7 +171,7 @@ async def get_patient_payment_history(patient_id: str, auth: AuthContext = Depen
         )
     if not rows:
         raise HTTPException(status_code=404, detail="No payment records found")
-    return [dict(r) for r in rows]
+    return [_serialize_payment_record(r) for r in rows]
 
 
 @router.post(
@@ -265,4 +274,4 @@ async def create_billing(body: CreateBillingRequest, auth: AuthContext = Depends
         },
     )
 
-    return dict(row)
+    return _serialize_payment_record(row)

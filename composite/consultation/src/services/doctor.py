@@ -5,17 +5,20 @@ import grpc.aio
 from src.proto import doctor_pb2, doctor_pb2_grpc
 from src.config import settings
 
-channel = grpc.aio.insecure_channel(settings.DOCTOR_SERVICE_GRPC)
-stub = doctor_pb2_grpc.DoctorServiceStub(channel)
+
+def _channel():
+    return grpc.aio.insecure_channel(settings.DOCTOR_SERVICE_GRPC)
 
 
 async def get_doctor(doctor_id: str):
     """Retrieve doctor details by ID."""
-    response = await stub.GetDoctor(
-        doctor_pb2.GetDoctorRequest(doctor_id=doctor_id),
-        timeout=10,
-    )
-    return response
+    async with _channel() as channel:
+        stub = doctor_pb2_grpc.DoctorServiceStub(channel)
+        response = await stub.GetDoctor(
+            doctor_pb2.GetDoctorRequest(doctor_id=doctor_id),
+            timeout=10,
+        )
+        return response
 
 
 async def add_consultation_notes(
@@ -26,14 +29,16 @@ async def add_consultation_notes(
     diagnosis: str = "",
 ):
     """Store consultation notes on the doctor-service."""
-    response = await stub.AddConsultationNotes(
-        doctor_pb2.AddConsultationNotesRequest(
-            appointment_id=appointment_id,
-            doctor_id=doctor_id,
-            patient_id=patient_id,
-            notes=notes,
-            diagnosis=diagnosis,
-        ),
-        timeout=10,
-    )
-    return response
+    async with _channel() as channel:
+        stub = doctor_pb2_grpc.DoctorServiceStub(channel)
+        response = await stub.AddConsultationNotes(
+            doctor_pb2.AddConsultationNotesRequest(
+                appointment_id=appointment_id,
+                doctor_id=doctor_id,
+                patient_id=patient_id,
+                notes=notes,
+                diagnosis=diagnosis,
+            ),
+            timeout=10,
+        )
+        return response

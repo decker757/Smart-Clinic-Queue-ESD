@@ -21,6 +21,11 @@ services:
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
       CHECKIN_ORCHESTRATOR_URL: http://checkin-orchestrator:8000
       PAYMENT_SERVICE_URL: http://payment-service:3008
+      STRIPE_SERVICE_URL: http://stripe-service:8001
+      KONG_DNS_VALID_TTL: 1
+      KONG_DNS_STALE_TTL: 0
+      KONG_DNS_ERROR_TTL: 1
+      KONG_DNS_NOT_FOUND_TTL: 1
     ports:
       - "8000:8000"   # proxy
       - "8444:8001"   # admin API

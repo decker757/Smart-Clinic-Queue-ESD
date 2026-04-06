@@ -3,9 +3,9 @@
 # Safe to re-run — skips Cognito users that already exist.
 #
 # Requires:
-#   - aws CLI configured with ap-southeast-1 access
+#   - aws CLI configured with access to your target AWS account/region
 #   - psql available locally
-#   - DATABASE_URL in infra/env/auth.env (RDS connection string)
+#   - infra/scripts/.env.aws with DB_URL, AWS_REGION, and COGNITO_USER_POOL_ID
 #
 # Usage: sh infra/scripts/seed-aws.sh
 
@@ -13,14 +13,28 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env.aws"
 
-POOL_ID="ap-southeast-1_3XvO4K1lI"
-REGION="ap-southeast-1"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "ERROR: $ENV_FILE not found"
+  echo "Copy env-aws.example to .env.aws and fill in your deployment config."
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+
+for var in DB_URL AWS_REGION COGNITO_USER_POOL_ID; do
+  eval val=\$$var
+  [ -z "$val" ] && { echo "ERROR: $var is not set in .env.aws"; exit 1; }
+done
+
+POOL_ID="$COGNITO_USER_POOL_ID"
+REGION="$AWS_REGION"
 PASSWORD="Test1234!"   # Cognito requires upper+lower+digit+symbol
 
-# Load DATABASE_URL, strip ?options=... if present
-RAW_URL=$(grep "^DATABASE_URL=" "$REPO_ROOT/infra/env/auth.env" 2>/dev/null | cut -d= -f2-)
-[ -z "$RAW_URL" ] && { echo "ERROR: DATABASE_URL not found in infra/env/auth.env"; exit 1; }
+# Load DB_URL, strip ?options=... if present
+RAW_URL="$DB_URL"
 DB_URL=$(echo "$RAW_URL" | sed 's/?options=.*$//')
 
 pass() { echo "  ✓ $1" >&2; }

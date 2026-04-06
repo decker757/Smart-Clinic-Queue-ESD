@@ -16,7 +16,7 @@ A polyclinic queue management system built with an event-driven microservices ar
 | Notifications | Twilio (SMS via notification-service) |
 | Payments | Stripe |
 | Frontend | Vue 3 + Vite + Tailwind CSS |
-| Infrastructure | AWS ECS Fargate (16 services) |
+| Infrastructure | AWS ECS Fargate (15 backend services) |
 
 ## Public URLs
 
@@ -70,7 +70,7 @@ Method-specific routes are used (not `ANY`) so OPTIONS preflight requests bypass
 | `GET/POST /api/composite/staff/{proxy+}` | Cognito JWT | composite-staff-orchestrator |
 | `GET/POST/PUT /api/composite/patients/{proxy+}` | Cognito JWT | composite-patient-orchestrator |
 | `GET/POST /api/payments/{proxy+}` | Cognito JWT | payment-service |
-| `POST /api/stripe/webhook` | None (Stripe signature) | stripe-service |
+| `POST /api/payments/webhook` | None (Stripe signature) | stripe-service |
 
 ### ALB Path Routing
 
@@ -78,6 +78,7 @@ The ALB receives traffic from both API Gateway and CloudFront (WebSocket path on
 
 | Path Pattern | Service | Port |
 |-------------|---------|------|
+| `/api/auth*` | auth-service | 3000 |
 | `/api/queue/ws*` | queue-coordinator-service | 3002 |
 | `/api/queue/*` | queue-coordinator-service | 3002 |
 | `/api/composite/appointments*` | composite-appointment | 8000 |
@@ -85,6 +86,7 @@ The ALB receives traffic from both API Gateway and CloudFront (WebSocket path on
 | `/api/composite/consultations*` | composite-consultation | 8002 |
 | `/api/composite/staff*` | composite-staff-orchestrator | 8004 |
 | `/api/composite/patients*` | composite-patient-orchestrator | 8001 |
+| `/api/payments/webhook` | stripe-service | 8001 |
 | `/api/payments*` | payment-service | 3008 |
 | `/api/appointments*` | appointment-service | 3001 |
 
@@ -378,9 +380,11 @@ aws ecr get-login-password --region ap-southeast-1 \
   | docker login --username AWS --password-stdin \
     617341601600.dkr.ecr.ap-southeast-1.amazonaws.com
 
-# Build and push all images (always --platform linux/amd64 — ECS is x86-64)
+# Build and push all backend images (always --platform linux/amd64 — ECS is x86-64)
 sh infra/scripts/push-to-ecr.sh
 ```
+
+The frontend is deployed separately to S3 + CloudFront in Step 10.
 
 > **Critical:** Always use `--platform linux/amd64`. If you build on Apple Silicon (arm64) without this flag, the container will silently crash on Fargate with no error logs.
 
@@ -402,15 +406,16 @@ aws logs create-log-group --log-group-name /ecs/smart-clinic --region ap-southea
    - Type: Private DNS namespace
    - VPC: default
 
-2. Create service discovery entries for all 16 services:
+2. Copy `infra/scripts/env-aws.example` to `infra/scripts/.env.aws` and fill in your account, network, Cloud Map, target group, URL, and secret values.
+
+3. Create service discovery entries for all 15 backend services:
 ```bash
 sh infra/scripts/create-service-discovery.sh
-# Note the Service IDs printed — needed for the next step
 ```
 
 **Task Definitions:**
 
-Edit `infra/scripts/register-task-definitions.sh` to fill in your credentials (RDS, MQ, Redis, Stripe, Twilio, Google Maps, Cognito User Pool ID), then:
+Register task definitions from the shared `.env.aws` contract:
 ```bash
 sh infra/scripts/register-task-definitions.sh
 ```
@@ -419,7 +424,7 @@ Each task: Fargate, 0.25 vCPU, 512 MB, `ecsTaskExecutionRole`.
 
 **ECS Services:**
 
-Edit `infra/scripts/create-ecs-services.sh` with the Service IDs from Cloud Map, then:
+Create ECS services from the shared `.env.aws` contract:
 ```bash
 sh infra/scripts/create-ecs-services.sh
 ```
@@ -441,15 +446,17 @@ All tasks share one security group. Add a self-referencing inbound rule (all tra
 
 | Priority | Path | Target Group |
 |----------|------|--------------|
-| 1 | `/api/queue/ws*` | queue-coordinator |
-| 2 | `/api/queue/*` | queue-coordinator |
-| 3 | `/api/composite/appointments*` | composite-appointment |
-| 4 | `/api/check-in*` | checkin-orchestrator |
-| 5 | `/api/composite/consultations*` | composite-consultation |
-| 6 | `/api/composite/staff*` | composite-staff-orchestrator |
-| 7 | `/api/composite/patients*` | composite-patient-orchestrator |
-| 8 | `/api/payments*` | payment-service |
-| 9 | `/api/appointments*` | appointment-service |
+| 1 | `/api/auth*` | auth-service |
+| 2 | `/api/queue/ws*` | queue-coordinator |
+| 3 | `/api/queue/*` | queue-coordinator |
+| 4 | `/api/composite/appointments*` | composite-appointment |
+| 5 | `/api/check-in*` | checkin-orchestrator |
+| 6 | `/api/composite/consultations*` | composite-consultation |
+| 7 | `/api/composite/staff*` | composite-staff-orchestrator |
+| 8 | `/api/composite/patients*` | composite-patient-orchestrator |
+| 9 | `/api/payments/webhook` | stripe-service |
+| 10 | `/api/payments*` | payment-service |
+| 11 | `/api/appointments*` | appointment-service |
 
 4. Register ECS task IPs to their target groups (ECS handles this automatically when services are created with `--load-balancers`).
 

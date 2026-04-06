@@ -3,24 +3,35 @@ from src.proto import patient_pb2, patient_pb2_grpc
 from src.models.history import AddHistoryRequest, HistoryResponse
 from src.config import settings
 
-channel = grpc.aio.insecure_channel(settings.PATIENT_SERVICE_GRPC)
-stub = patient_pb2_grpc.PatientServiceStub(channel)
+
+def _channel():
+    return grpc.aio.insecure_channel(settings.PATIENT_SERVICE_GRPC)
 
 async def list_history(patient_id: str) -> list[HistoryResponse]:
     try:
-        response = await stub.GetHistory(patient_pb2.GetHistoryRequest(patient_id=patient_id))
-        return response.entries
+        async with _channel() as channel:
+            stub = patient_pb2_grpc.PatientServiceStub(channel)
+            response = await stub.GetHistory(
+                patient_pb2.GetHistoryRequest(patient_id=patient_id),
+                timeout=10,
+            )
+            return response.entries
     except grpc.RpcError as e:
         raise e
 
 async def add_history(patient_id: str, diagnosis: str, diagnosed_at: str = "", notes: str = ""):
     try:
-        response = await stub.AddHistory(patient_pb2.AddHistoryRequest(
-            patient_id=patient_id,
-            diagnosis=diagnosis,
-            diagnosed_at=diagnosed_at,
-            notes=notes,
-        ))
-        return response
+        async with _channel() as channel:
+            stub = patient_pb2_grpc.PatientServiceStub(channel)
+            response = await stub.AddHistory(
+                patient_pb2.AddHistoryRequest(
+                    patient_id=patient_id,
+                    diagnosis=diagnosis,
+                    diagnosed_at=diagnosed_at,
+                    notes=notes,
+                ),
+                timeout=10,
+            )
+            return response
     except grpc.RpcError as e:
         raise e
