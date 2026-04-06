@@ -8,16 +8,16 @@ TMP_PEM="/tmp/scq-jwks.pem"
 
 cd "$INFRA_DIR"
 
-echo "[1/8] Checking Docker daemon..."
+echo "[1/9] Checking Docker daemon..."
 if ! docker info >/dev/null 2>&1; then
   echo "Docker daemon is not running. Start Docker Desktop and rerun this script."
   exit 1
 fi
 
-echo "[2/8] Starting base services..."
+echo "[2/9] Starting base services..."
 docker compose up -d rabbitmq app-db
 
-echo "[3/8] Waiting for app-db and applying schema..."
+echo "[3/9] Waiting for app-db and applying schema..."
 for _ in $(seq 1 60); do
   if docker compose exec -T app-db pg_isready -U app -d clinic >/dev/null 2>&1; then
     break
@@ -34,10 +34,10 @@ docker compose exec -T app-db \
   psql -U app -d clinic -v ON_ERROR_STOP=1 \
   -f /docker-entrypoint-initdb.d/00-schema.sql >/dev/null
 
-echo "[4/8] Starting auth-service..."
+echo "[4/9] Starting auth-service..."
 docker compose up -d auth-service
 
-echo "[5/8] Waiting for auth-service JWKS endpoint..."
+echo "[5/9] Waiting for auth-service JWKS endpoint..."
 for _ in $(seq 1 60); do
   if curl -sf "http://localhost:3000/api/auth/jwks" >/dev/null 2>&1; then
     break
@@ -50,7 +50,7 @@ if ! curl -sf "http://localhost:3000/api/auth/jwks" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[6/8] Extracting JWKS RSA public key and updating kong.env..."
+echo "[6/9] Extracting JWKS RSA public key and updating kong.env..."
 sh "$INFRA_DIR/scripts/extract-jwks-pem.sh" "http://localhost:3000" \
   | awk '/-----BEGIN PUBLIC KEY-----/{flag=1} flag{print} /-----END PUBLIC KEY-----/{flag=0}' > "$TMP_PEM"
 
@@ -65,11 +65,14 @@ fi
   echo "BETTER_AUTH_RSA_PUBLIC_KEY=\"$(cat "$TMP_PEM")\""
 } > "$KONG_ENV"
 
-echo "[7/8] Starting full stack and reloading Kong..."
+echo "[7/9] Starting full stack and reloading Kong..."
 docker compose up -d
 
-echo "[8/8] Running integration tests..."
+echo "[8/9] Seeding local demo users..."
 cd "$ROOT_DIR"
+sh infra/scripts/seed-users.sh
+
+echo "[9/9] Running integration tests..."
 sh infra/tests/test-staff-orchestrator.sh
 
 for f in infra/tests/*.sh; do

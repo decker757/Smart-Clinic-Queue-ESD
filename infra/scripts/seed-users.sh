@@ -3,9 +3,9 @@
 # Safe to re-run — skips accounts that already exist.
 #
 # Requires:
-#   - Kong + auth-service running (localhost:8000)
-#   - infra-app-db-1 container running (for doctors table)
-#   - psql available locally OR Docker (for Supabase role updates)
+#   - auth-service running (localhost:3000)
+#   - app-db running for local Docker mode
+#   - psql available locally OR Docker (for external DB mode)
 #   - DATABASE_URL readable from infra/env/auth.env
 #
 # Usage: sh infra/scripts/seed-users.sh
@@ -14,45 +14,61 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+COMPOSE_FILE="$REPO_ROOT/infra/docker-compose.yml"
 
-AUTH="http://localhost:8000/api/auth"
+AUTH="http://localhost:3000/api/auth"
 
-# Load Supabase DATABASE_URL from auth.env
-# Strip ?options=... — psql rejects that query param; we SET search_path manually instead
+# Load DATABASE_URL from auth.env.
+# Strip ?options=... — psql rejects that query param; we SET search_path manually instead.
 RAW_URL=$(grep "^DATABASE_URL=" "$REPO_ROOT/infra/env/auth.env" 2>/dev/null | cut -d= -f2-)
 if [ -z "$RAW_URL" ]; then
   echo "ERROR: DATABASE_URL not found in infra/env/auth.env"
   exit 1
 fi
-SUPABASE_URL=$(echo "$RAW_URL" | sed 's/?options=.*$//')
+DATABASE_URL=$(echo "$RAW_URL" | sed 's/?options=.*$//')
+
+LOCAL_DOCKER_DB=false
+case "$RAW_URL" in
+  *@app-db:*)
+    LOCAL_DOCKER_DB=true
+    ;;
+esac
 
 pass() { echo "  ✓ $1"; }
 skip() { echo "  - $1 (already exists)"; }
 fail() { echo "  ✗ FAIL: $1"; exit 1; }
 
-# Run SQL against Supabase (betterauth schema)
-supabase_exec() {
-  SQL="SET search_path TO betterauth; $1"
-  if command -v psql >/dev/null 2>&1; then
-    psql "$SUPABASE_URL" -c "$SQL" -t -A 2>/dev/null
+# Run SQL against the configured DB, using docker compose exec for local Docker mode.
+db_exec() {
+  SEARCH_PATH="$1"; shift
+  SQL="SET search_path TO $SEARCH_PATH; $1"
+
+  if [ "$LOCAL_DOCKER_DB" = "true" ]; then
+    docker compose -f "$COMPOSE_FILE" exec -T app-db \
+      psql -U app -d clinic -v ON_ERROR_STOP=1 -c "$SQL" -t -A 2>/dev/null
+  elif command -v psql >/dev/null 2>&1; then
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "$SQL" -t -A 2>/dev/null
   else
-    docker run --rm postgres:16-alpine psql "$SUPABASE_URL" -c "$SQL" -t -A 2>/dev/null
+    docker run --rm postgres:16-alpine \
+      psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "$SQL" -t -A 2>/dev/null
   fi
 }
 
-# Run SQL against Supabase doctors schema
+supabase_exec() {
+  db_exec betterauth "$1"
+}
+
 doctors_exec() {
-  SQL="SET search_path TO doctors; $1"
-  if command -v psql >/dev/null 2>&1; then
-    psql "$SUPABASE_URL" -c "$SQL" -t -A 2>/dev/null
-  else
-    docker run --rm postgres:16-alpine psql "$SUPABASE_URL" -c "$SQL" -t -A 2>/dev/null
-  fi
+  db_exec doctors "$1"
+}
+
+appt_exec() {
+  db_exec appointments "$1"
 }
 
 signup() {
   EMAIL="$1"; PASSWORD="$2"; NAME="$3"
-  RESP=$(curl -s -X POST "$AUTH/sign-up/email" \
+  RESP=$(curl -sf -X POST "$AUTH/sign-up/email" \
     -H "Content-Type: application/json" \
     -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"$NAME\"}")
   echo "$RESP" | jq -r '.user.id // empty'
@@ -62,6 +78,12 @@ echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║          SEEDING TEST USERS              ║"
 echo "╚══════════════════════════════════════════╝"
+
+if [ "$LOCAL_DOCKER_DB" = "true" ]; then
+  pass "Using local Docker app-db via docker compose exec"
+else
+  pass "Using DATABASE_URL from infra/env/auth.env"
+fi
 
 # ── Doctor ────────────────────────────────────────────────────────────────────
 echo ""
@@ -89,14 +111,6 @@ doctors_exec "INSERT INTO doctors (id, name, specialisation, contact)
 pass "doctors.doctors record upserted"
 
 # Also insert into appointments.doctors so the FK on appointments.appointments.doctor_id works
-appt_exec() {
-  SQL="SET search_path TO appointments; $1"
-  if command -v psql >/dev/null 2>&1; then
-    psql "$SUPABASE_URL" -c "$SQL" -t -A 2>/dev/null
-  else
-    docker run --rm postgres:16-alpine psql "$SUPABASE_URL" -c "$SQL" -t -A 2>/dev/null
-  fi
-}
 appt_exec "INSERT INTO doctors (id, name, specialization, slot_capacity)
            VALUES ('$DOCTOR_ID', '$DOCTOR_NAME', 'General Practice', 1)
            ON CONFLICT (id) DO NOTHING" > /dev/null
