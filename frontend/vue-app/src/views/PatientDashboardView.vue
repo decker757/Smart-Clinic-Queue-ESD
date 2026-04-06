@@ -60,6 +60,30 @@ const FALLBACK_POLL_MS = 60_000
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
+// ─── Pending payment check ──────────────────────────────────────────────────
+const pendingPayment = ref(null)
+
+async function checkPendingPayments() {
+  const pid = authStore.user?.id
+  if (!pid) return
+  try {
+    const res = await fetch(`${API_BASE}/api/composite/patients/${pid}/payments`, {
+      headers: { Authorization: `Bearer ${authStore.jwt}` },
+    })
+    if (res.ok) {
+      const all = (await res.json()) ?? []
+      pendingPayment.value = all.find(p => p.status === 'pending') ?? null
+    }
+  } catch {
+    // non-critical
+  }
+}
+
+async function openPayment() {
+  if (!pendingPayment.value?.payment_link) return
+  window.open(pendingPayment.value.payment_link, '_blank', 'noopener,noreferrer')
+}
+
 async function checkProfile() {
   const pid = authStore.user?.id
   if (!pid) return
@@ -80,6 +104,7 @@ async function checkProfile() {
 onMounted(() => {
   checkProfile()
   loadDashboard()
+  checkPendingPayments()
   fallbackTimer = setInterval(loadDashboard, FALLBACK_POLL_MS)
 })
 
@@ -455,6 +480,21 @@ async function handleLateConfirm(isComing) {
             </button>
           </div>
         </div>
+      </section>
+
+      <!-- ─── Pending Payment Banner ────────────────────────────────────── -->
+      <section v-if="pendingPayment" class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <p class="font-semibold text-sm text-amber-800">Payment Pending</p>
+          <p class="text-xs text-amber-600 mt-0.5">You have an outstanding consultation fee to pay.</p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 px-4 py-2 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition-colors duration-150 cursor-pointer"
+          @click="openPayment"
+        >
+          Pay Now
+        </button>
       </section>
 
       <!-- ─── Quick Actions ──────────────────────────────────────────────── -->

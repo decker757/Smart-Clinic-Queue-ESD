@@ -80,8 +80,8 @@ function historyByAppt(appt) {
   })
 }
 
-async function loadDetail() {
-  if (memos.value !== null) return  // already fetched
+async function loadDetail(force = false) {
+  if (memos.value !== null && !force) return  // already fetched
   detailLoading.value = true
   const pid = authStore.user?.id
   const [memoRes, histRes, payRes] = await Promise.all([
@@ -171,6 +171,10 @@ async function loadAll() {
 
 onMounted(() => {
   if (!authStore.user?.id) { router.push('/login'); return }
+  // Reset cached detail so fresh data is loaded when an appointment is expanded
+  memos.value = null
+  history.value = null
+  payments.value = null
   loadAll()
 })
 </script>

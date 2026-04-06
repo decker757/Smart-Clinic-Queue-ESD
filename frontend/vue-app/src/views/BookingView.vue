@@ -105,7 +105,7 @@ async function fetchSlots() {
   error.value = ''
   try {
     const res = await fetch(
-      `${API}/api/doctors/${selectedDoctor.value}/slots?date=${selectedDate.value}`,
+      `${API}/api/composite/staff/doctors/${selectedDoctor.value}/slots?date=${selectedDate.value}`,
       { headers: authHeaders(), signal: slotsAbortController.signal },
     )
     if (!res.ok) throw new Error('Failed to load available slots')
