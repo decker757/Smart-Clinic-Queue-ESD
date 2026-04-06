@@ -25,17 +25,3 @@ def create_checkout_session(amount: int, currency: str, consultation_id: str, pa
         metadata=metadata,
         payment_intent_data={"metadata": metadata},
     )
-
-
-async def handle_create_payment(payload: dict) -> dict:
-    session = create_checkout_session(
-        amount=payload["amount"],
-        currency=payload["currency"],
-        consultation_id=payload["consultation_id"],
-        patient_id=payload["patient_id"],
-    )
-    return {
-        "payment_url": session.url,
-        "payment_intent_id": session.payment_intent,
-        "status": "pending",
-    }

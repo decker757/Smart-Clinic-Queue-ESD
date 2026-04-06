@@ -13,7 +13,18 @@ DLX = "clinic.events.dlx"
 DLQ = "payment-service.events.dlq"
 
 
+def _validate_payload(status: str, payload: dict):
+    required = ["consultation_id", "patient_id", "payment_intent_id"]
+    if status == "pending":
+        required.append("payment_link")
+
+    missing = [field for field in required if not payload.get(field)]
+    if missing:
+        raise ValueError(f"Missing required payment fields: {', '.join(missing)}")
+
+
 async def _record_payment(status: str, payload: dict):
+    _validate_payload(status, payload)
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(

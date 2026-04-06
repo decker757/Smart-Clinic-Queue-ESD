@@ -6,6 +6,8 @@ from fastapi import Depends, Header, HTTPException
 from app.config import settings
 
 _jwks_client: PyJWKClient | None = None
+JWT_AUDIENCE = "smart-clinic-services"
+JWT_ISSUER = "smart-clinic"
 
 
 @dataclass
@@ -34,7 +36,8 @@ async def require_auth(authorization: str = Header(...)) -> AuthContext:
             token,
             signing_key.key,
             algorithms=["RS256"],
-            options={"verify_aud": False},
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
         )
         return AuthContext(
             user_id=payload["sub"],

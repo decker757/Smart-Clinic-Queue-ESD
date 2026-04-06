@@ -6,6 +6,8 @@ from app.config.settings import settings
 logger = logging.getLogger(__name__)
 
 _jwks_client: PyJWKClient | None = None
+JWT_AUDIENCE = "smart-clinic-services"
+JWT_ISSUER = "smart-clinic"
 
 
 def _get_jwks_client() -> PyJWKClient:
@@ -27,7 +29,8 @@ async def verify_token(token: str) -> dict | None:
             token,
             signing_key.key,
             algorithms=["RS256"],
-            options={"verify_aud": False},
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
         )
         return payload
     except jwt.PyJWTError:
