@@ -1,3 +1,4 @@
+import path from "path";
 import express, { Request, Response, NextFunction } from "express";
 import swaggerUi from "swagger-ui-express";
 import patientRouter from "./controller/Patient";
@@ -6,6 +7,7 @@ import memoRouter from "./controller/Memo";
 import { startGrpcServer } from "./grpc";
 import { fetchPublicKey } from "./middleware/auth";
 import { swaggerSpec } from "./swagger";
+import { LOCAL_DIR } from "./storage/supabase";
 
 const app = express();
 
@@ -18,6 +20,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.json());
+
+// Serve locally-stored uploads (used in local Docker mode when S3 is unavailable)
+app.use("/uploads", express.static(LOCAL_DIR));
 
 app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", service: "patient-service" });

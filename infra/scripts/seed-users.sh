@@ -164,18 +164,139 @@ echo "  email:    $PATIENT_EMAIL"
 echo "  password: $PATIENT_PASSWORD"
 echo "  user_id:  $PATIENT_ID"
 
+# ── Doctor 2 ─────────────────────────────────────────────────────────────────
+echo ""
+echo "━━━ Doctor 2 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+DOCTOR2_EMAIL="doctor2@clinic.com"
+DOCTOR2_PASSWORD="password123"
+DOCTOR2_NAME="Dr Sarah Lim"
+
+EXISTING=$(supabase_exec "SELECT id FROM betterauth.\"user\" WHERE email = '$DOCTOR2_EMAIL'")
+if [ -n "$EXISTING" ]; then
+  DOCTOR2_ID="$EXISTING"
+  skip "Doctor 2 account already exists (id=$DOCTOR2_ID)"
+else
+  DOCTOR2_ID=$(signup "$DOCTOR2_EMAIL" "$DOCTOR2_PASSWORD" "$DOCTOR2_NAME")
+  [ -z "$DOCTOR2_ID" ] && fail "Doctor 2 sign-up failed"
+  pass "Doctor 2 account created (id=$DOCTOR2_ID)"
+fi
+
+supabase_exec "UPDATE betterauth.\"user\" SET role = 'doctor' WHERE id = '$DOCTOR2_ID'" > /dev/null
+pass "Role set to 'doctor'"
+
+doctors_exec "INSERT INTO doctors.doctors (id, name, specialisation, contact)
+              VALUES ('$DOCTOR2_ID', '$DOCTOR2_NAME', 'Family Medicine', 'doctor2@clinic.com')
+              ON CONFLICT (id) DO NOTHING" > /dev/null
+pass "doctors.doctors record upserted"
+
+appt_exec "INSERT INTO appointments.doctors (id, name, specialization, slot_capacity)
+           VALUES ('$DOCTOR2_ID', '$DOCTOR2_NAME', 'Family Medicine', 1)
+           ON CONFLICT (id) DO NOTHING" > /dev/null
+pass "appointments.doctors record upserted (FK sync)"
+
+echo "  email:    $DOCTOR2_EMAIL"
+echo "  password: $DOCTOR2_PASSWORD"
+echo "  user_id:  $DOCTOR2_ID"
+
+# ── Doctor 3 ─────────────────────────────────────────────────────────────────
+echo ""
+echo "━━━ Doctor 3 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+DOCTOR3_EMAIL="doctor3@clinic.com"
+DOCTOR3_PASSWORD="password123"
+DOCTOR3_NAME="Dr James Tan"
+
+EXISTING=$(supabase_exec "SELECT id FROM betterauth.\"user\" WHERE email = '$DOCTOR3_EMAIL'")
+if [ -n "$EXISTING" ]; then
+  DOCTOR3_ID="$EXISTING"
+  skip "Doctor 3 account already exists (id=$DOCTOR3_ID)"
+else
+  DOCTOR3_ID=$(signup "$DOCTOR3_EMAIL" "$DOCTOR3_PASSWORD" "$DOCTOR3_NAME")
+  [ -z "$DOCTOR3_ID" ] && fail "Doctor 3 sign-up failed"
+  pass "Doctor 3 account created (id=$DOCTOR3_ID)"
+fi
+
+supabase_exec "UPDATE betterauth.\"user\" SET role = 'doctor' WHERE id = '$DOCTOR3_ID'" > /dev/null
+pass "Role set to 'doctor'"
+
+doctors_exec "INSERT INTO doctors.doctors (id, name, specialisation, contact)
+              VALUES ('$DOCTOR3_ID', '$DOCTOR3_NAME', 'Paediatrics', 'doctor3@clinic.com')
+              ON CONFLICT (id) DO NOTHING" > /dev/null
+pass "doctors.doctors record upserted"
+
+appt_exec "INSERT INTO appointments.doctors (id, name, specialization, slot_capacity)
+           VALUES ('$DOCTOR3_ID', '$DOCTOR3_NAME', 'Paediatrics', 1)
+           ON CONFLICT (id) DO NOTHING" > /dev/null
+pass "appointments.doctors record upserted (FK sync)"
+
+echo "  email:    $DOCTOR3_EMAIL"
+echo "  password: $DOCTOR3_PASSWORD"
+echo "  user_id:  $DOCTOR3_ID"
+
+# ── Patient 2 ────────────────────────────────────────────────────────────────
+echo ""
+echo "━━━ Patient 2 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+PATIENT2_EMAIL="patient2@clinic.com"
+PATIENT2_PASSWORD="password123"
+PATIENT2_NAME="Alice Wong"
+
+EXISTING=$(supabase_exec "SELECT id FROM betterauth.\"user\" WHERE email = '$PATIENT2_EMAIL'")
+if [ -n "$EXISTING" ]; then
+  PATIENT2_ID="$EXISTING"
+  skip "Patient 2 account already exists (id=$PATIENT2_ID)"
+else
+  PATIENT2_ID=$(signup "$PATIENT2_EMAIL" "$PATIENT2_PASSWORD" "$PATIENT2_NAME")
+  [ -z "$PATIENT2_ID" ] && fail "Patient 2 sign-up failed"
+  pass "Patient 2 account created (id=$PATIENT2_ID)"
+fi
+pass "Role = 'patient' (default)"
+
+echo "  email:    $PATIENT2_EMAIL"
+echo "  password: $PATIENT2_PASSWORD"
+echo "  user_id:  $PATIENT2_ID"
+
+# ── Patient 3 ────────────────────────────────────────────────────────────────
+echo ""
+echo "━━━ Patient 3 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+PATIENT3_EMAIL="patient3@clinic.com"
+PATIENT3_PASSWORD="password123"
+PATIENT3_NAME="Bob Chen"
+
+EXISTING=$(supabase_exec "SELECT id FROM betterauth.\"user\" WHERE email = '$PATIENT3_EMAIL'")
+if [ -n "$EXISTING" ]; then
+  PATIENT3_ID="$EXISTING"
+  skip "Patient 3 account already exists (id=$PATIENT3_ID)"
+else
+  PATIENT3_ID=$(signup "$PATIENT3_EMAIL" "$PATIENT3_PASSWORD" "$PATIENT3_NAME")
+  [ -z "$PATIENT3_ID" ] && fail "Patient 3 sign-up failed"
+  pass "Patient 3 account created (id=$PATIENT3_ID)"
+fi
+pass "Role = 'patient' (default)"
+
+echo "  email:    $PATIENT3_EMAIL"
+echo "  password: $PATIENT3_PASSWORD"
+echo "  user_id:  $PATIENT3_ID"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║             SEED COMPLETE                ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
-echo "Credentials for E2E tests:"
+echo "┌──────────────────────────────────────────────────────────────┐"
+echo "│  Role      Email                  Password    Browser       │"
+echo "├──────────────────────────────────────────────────────────────┤"
+echo "│  Doctor    doctor@clinic.com      password123  Window 1     │"
+echo "│  Doctor    doctor2@clinic.com     password123  (alt)        │"
+echo "│  Doctor    doctor3@clinic.com     password123  (alt)        │"
+echo "│  Staff     staff@clinic.com       password123  Window 2     │"
+echo "│  Patient   patient@clinic.com     password123  Window 3     │"
+echo "│  Patient   patient2@clinic.com    password123  (alt)        │"
+echo "│  Patient   patient3@clinic.com    password123  (alt)        │"
+echo "└──────────────────────────────────────────────────────────────┘"
 echo ""
-echo "  export DOCTOR_EMAIL=$DOCTOR_EMAIL DOCTOR_PASSWORD=$DOCTOR_PASSWORD"
-echo "  export STAFF_EMAIL=$STAFF_EMAIL   STAFF_PASSWORD=$STAFF_PASSWORD"
-echo "  export PATIENT_EMAIL=$PATIENT_EMAIL PATIENT_PASSWORD=$PATIENT_PASSWORD"
+echo "Triple-browser demo setup:"
+echo "  Window 1 (Doctor):  doctor@clinic.com  / password123"
+echo "  Window 2 (Staff):   staff@clinic.com   / password123"
+echo "  Window 3 (Patient): patient@clinic.com / password123"
 echo ""
-echo "Run consultation E2E test:"
-echo "  export DOCTOR_EMAIL=$DOCTOR_EMAIL DOCTOR_PASSWORD=$DOCTOR_PASSWORD"
-echo "  sh infra/tests/test-consultation.sh"
+echo "For concurrent patient testing, use patient2/patient3 in incognito windows."
