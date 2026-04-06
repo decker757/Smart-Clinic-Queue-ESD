@@ -31,5 +31,4 @@ class ConsultationResponse(BaseModel):
     patient_id: str
     doctor_id: str
     status: str  # "completed"
-    payment_link: Optional[str] = None
     message: str

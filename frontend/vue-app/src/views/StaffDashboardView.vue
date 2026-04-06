@@ -258,7 +258,7 @@ async function handleSubmitBilling(appt) {
       amountCents: billingAmounts.value[appt.id] ?? BASE_CONSULT_CENTS,
       currency: 'sgd',
     })
-    billingSuccess.value = `Billing created for appointment ${appt.id.slice(0, 8).toUpperCase()}. Payment link is ready for the patient.`
+    billingSuccess.value = `Billing created for appointment ${appt.id.slice(0, 8).toUpperCase()}. Patient can now pay from their appointment history.`
     setTimeout(() => { billingSuccess.value = '' }, 4000)
     // Remove from pending list
     pendingBilling.value = pendingBilling.value.filter((a) => a.id !== appt.id)

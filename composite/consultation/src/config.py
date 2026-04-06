@@ -19,11 +19,6 @@ class Settings:
         "QUEUE_SERVICE_GRPC", "queue-coordinator-service:50052"
     )
 
-    # ── Wrapper service URLs ─────────────────────────────────
-    PAYMENT_SERVICE_GRPC: str = os.getenv(
-        "PAYMENT_SERVICE_GRPC", "stripe-service:50051"
-    )
-
     # ── Auth ─────────────────────────────────────────────────
     JWKS_URL: str = os.getenv(
         "JWKS_URL", "http://auth-service:3000/api/auth/jwks"

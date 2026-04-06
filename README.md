@@ -228,16 +228,22 @@ The seed script also inserts the doctor into the `doctors.doctors` and `appointm
 6. Patient NO / no response (TTL 5 min) → `queue.removed` → removed from queue
 
 ### Scenario 3 — Doctor Completes Consultation
-1. Doctor submits notes, MC, prescription via staff dashboard
+1. Doctor submits notes, MC, prescription via doctor dashboard
 2. `composite-consultation` (synchronously):
    - Calls `patient-service` via gRPC → stores MC + prescription
    - Calls `doctor-service` via gRPC → stores consultation notes
    - Calls `appointment-service` → marks appointment `completed`
-   - Calls `stripe-service` via gRPC → creates Stripe checkout session
-3. `stripe-service` publishes `payment.pending` → `payment-service` records it
-4. Publishes `consultation.completed` → notification-service sends patient the payment link
-5. `queue-coordinator` removes patient from queue
-6. Patient pays → Stripe webhook → `payment.completed` / `payment.failed`
+3. Publishes `consultation.completed` → `queue-coordinator` removes patient from queue
+4. Payment is **not** created automatically — staff handles billing separately (see Scenario 3b)
+
+### Scenario 3b — Staff Designates Billing
+1. Staff opens the **Pending Billing** section on the staff dashboard
+2. `staff-orchestrator` fetches completed appointments without payment records
+3. Staff expands an appointment → sees the prescription and MC memos
+4. Staff sets the total amount (base $20 SGD consultation fee + medication surcharges)
+5. Staff submits billing → `staff-orchestrator` calls `payment-service` → `stripe-service` creates Stripe checkout session
+6. Patient sees the payment link in their appointment history and can pay
+7. Patient pays → Stripe webhook → `payment.completed` / `payment.failed`
 
 ### Scenario 4 — Real-Time Queue Updates
 
