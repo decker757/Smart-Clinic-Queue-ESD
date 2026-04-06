@@ -199,12 +199,18 @@ services:
     restart: unless-stopped
 
   # ─── Composite Services ─────────────────────────────────────
+  # Composite orchestrators are stateless and sit behind Kong, which
+  # round-robins across replicas via Docker DNS.  deploy.replicas > 1
+  # demonstrates horizontal scaling; Kong load-balances automatically.
+  # Host-port bindings are omitted on scaled services because multiple
+  # containers cannot share the same host port — reach them via Kong (:8000).
+
   composite-appointment:
     build:
       context: ..
       dockerfile: composite/appointment/Dockerfile
-    ports:
-      - "8080:8000"
+    deploy:
+      replicas: 2
     env_file:
       - ./env/composite-appointment.env
     depends_on:
@@ -217,7 +223,6 @@ services:
   checkin-orchestrator:
     build:
       context: ../composite/check-in orchestrator
-    container_name: checkin-orchestrator
     ports:
       - "8085:8000"  # HOST_PORT:CONTAINER_PORT
     env_file:
@@ -235,8 +240,8 @@ services:
     build:
       context: ..
       dockerfile: composite/patient-orchestrator/Dockerfile
-    ports:
-      - "8082:8001"
+    deploy:
+      replicas: 2
     env_file:
       - ./env/composite-patient-orchestrator.env
     depends_on:
@@ -250,8 +255,8 @@ services:
     build:
       context: ..
       dockerfile: composite/staff-orchestrator/Dockerfile
-    ports:
-      - "8084:8004"
+    deploy:
+      replicas: 2
     env_file:
       - ./env/composite-staff-orchestrator.env
     depends_on:
@@ -269,8 +274,8 @@ services:
     build:
       context: ..
       dockerfile: composite/consultation/Dockerfile
-    ports:
-      - "8083:8002"
+    deploy:
+      replicas: 2
     env_file:
       - ./env/composite-consultation.env
     depends_on:

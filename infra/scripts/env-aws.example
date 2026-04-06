@@ -47,6 +47,11 @@ TWILIO_PHONE_NUMBER="YOUR_TWILIO_NUMBER"
 STRIPE_API_KEY="YOUR_STRIPE_KEY"
 STRIPE_WEBHOOK_SIGNING_SECRET="YOUR_STRIPE_WEBHOOK_SECRET"
 
+# Auto-scaling (used by enable-auto-scaling.sh)
+AUTOSCALING_MIN_TASKS="1"
+AUTOSCALING_MAX_TASKS="4"
+AUTOSCALING_CPU_TARGET="70"
+
 # ALB target group names for public services
 TG_AUTH_NAME="smart-clinic-auth"
 TG_QUEUE_NAME="smart-clinic-queue"

@@ -559,6 +559,24 @@ aws ecs update-service --cluster smart-clinic-queue --region ap-southeast-1 \
 aws logs tail /ecs/smart-clinic --log-stream-name-prefix <service-name> --follow
 ```
 
+### Horizontal scaling
+
+The system is designed for horizontal scaling: composite orchestrators are stateless, Redis handles shared queue state, and the ALB distributes traffic across all healthy tasks.
+
+**Local (Docker Compose):** The four main composite services (`composite-appointment`, `composite-patient-orchestrator`, `composite-staff-orchestrator`, `composite-consultation`) run with `deploy.replicas: 2` by default. Kong's internal DNS round-robins across replicas automatically. To adjust:
+
+```bash
+docker compose -f infra/docker-compose.yml up -d --scale composite-appointment=3
+```
+
+**AWS (ECS Fargate):** After creating services, enable CPU-based auto-scaling:
+
+```bash
+sh infra/scripts/enable-auto-scaling.sh
+```
+
+This configures each composite service to scale between 1–4 tasks, targeting 70% average CPU utilisation. The ALB automatically registers new tasks and distributes traffic. Scaling parameters are configurable in `.env.aws` (`AUTOSCALING_MIN_TASKS`, `AUTOSCALING_MAX_TASKS`, `AUTOSCALING_CPU_TARGET`).
+
 ### Scale to zero (save costs)
 
 ```bash
