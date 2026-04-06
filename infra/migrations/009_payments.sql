@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS payments.payments (
     consultation_id  TEXT        NOT NULL,   -- appointment_id from consultation
     patient_id       TEXT        NOT NULL,
     payment_intent_id TEXT,                  -- Stripe PaymentIntent ID
+    amount_cents     INT,                    -- total charge in smallest currency unit
+    currency         TEXT        DEFAULT 'sgd',
     status           TEXT        NOT NULL,   -- 'pending' | 'paid' | 'failed'
     payment_link     TEXT,
     created_at       TIMESTAMPTZ DEFAULT NOW()

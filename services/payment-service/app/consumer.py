@@ -19,12 +19,14 @@ async def _record_payment(status: str, payload: dict):
         await conn.execute(
             """
             INSERT INTO payments.payments
-                (consultation_id, patient_id, payment_intent_id, status, payment_link)
-            VALUES ($1, $2, $3, $4, $5)
+                (consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             """,
             payload.get("consultation_id"),
             payload.get("patient_id"),
             payload.get("payment_intent_id"),
+            payload.get("amount_cents"),
+            payload.get("currency", "sgd"),
             status,
             payload.get("payment_link"),
         )

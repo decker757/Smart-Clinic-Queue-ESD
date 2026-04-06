@@ -13,3 +13,8 @@ async def get_patient(patient_id: str):
 async def get_history(patient_id: str):
     response = await stub.GetHistory(patient_pb2.GetHistoryRequest(patient_id=patient_id))
     return response.entries
+
+
+async def get_memos(patient_id: str):
+    response = await stub.GetMemos(patient_pb2.GetMemosRequest(patient_id=patient_id))
+    return response.memos

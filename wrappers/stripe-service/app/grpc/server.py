@@ -27,6 +27,8 @@ class PaymentServiceServicer(payment_pb2_grpc.PaymentServiceServicer):
                 "consultation_id": request.appointment_id,
                 "patient_id": request.patient_id,
                 "payment_intent_id": session.id,
+                "amount_cents": settings.CONSULTATION_FEE_CENTS,
+                "currency": settings.CURRENCY,
                 "payment_link": session.url,
             })
             return payment_pb2.PaymentResponse(

@@ -21,6 +21,7 @@ const HANDLERS: Record<string, (payload: any) => Promise<void>> = {
     "queue.eta_alert":       QueueHandlers.handleEtaAlert,
     "doctor.unavailable":        DoctorHandlers.handleDoctorUnavailable,
     "consultation.completed":    ConsultationHandlers.handleConsultationCompleted,
+    "payment.link_created":      PaymentHandlers.handlePaymentLinkCreated,
     "payment.completed":         PaymentHandlers.handlePaymentCompleted,
 };
 

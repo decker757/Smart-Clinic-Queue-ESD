@@ -38,7 +38,6 @@ const showPatientModal = ref(false)
 // ─── Consultation form ────────────────────────────────────────────────────────
 const showConsultationModal = ref(false)
 const consultationDone = ref(false)
-const paymentLink = ref(null)
 const consultForm = ref({
   diagnosis: '',
   consultationNotes: '',
@@ -136,7 +135,6 @@ async function handleCallNext() {
 
 function openConsultationModal() {
   consultForm.value = { diagnosis: '', consultationNotes: '', prescribedMedication: '', issueMc: false, mcDays: '', mcStartDate: '', mcReason: '' }
-  paymentLink.value = null
   consultationDone.value = false
   actionError.value = ''
   showConsultationModal.value = true
@@ -160,7 +158,6 @@ async function handleComplete() {
       mcStartDate: f.issueMc ? f.mcStartDate : null,
       mcReason: f.issueMc ? f.mcReason : null,
     })
-    paymentLink.value = result.payment_link ?? null
     consultationDone.value = true
     actionSuccess.value = 'Consultation completed!'
     currentPatient.value = null
@@ -507,7 +504,7 @@ onUnmounted(() => {
             </svg>
             <p class="text-sm font-semibold text-emerald-700">Consultation completed successfully.</p>
           </div>
-          <p class="text-sm text-slate-500">Payment link has been sent to the patient via SMS.</p>
+          <p class="text-sm text-slate-500">Staff will review the prescription and finalise billing.</p>
           <AppButton variant="secondary" @click="showConsultationModal = false">Close</AppButton>
         </div>
 

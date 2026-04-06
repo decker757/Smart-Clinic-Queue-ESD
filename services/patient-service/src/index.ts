@@ -22,7 +22,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use(express.json());
 
 // Serve locally-stored uploads (used in local Docker mode when S3 is unavailable)
-app.use("/uploads", express.static(LOCAL_DIR));
+// Mounted under /api/patients/uploads so Kong proxies it to the browser via the
+// existing patient-service route (which matches /api/patients/*).
+app.use("/api/patients/uploads", express.static(LOCAL_DIR));
 
 app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", service: "patient-service" });

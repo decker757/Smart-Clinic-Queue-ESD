@@ -18,6 +18,9 @@ const {
   removeFromQueue,
   fetchPatient,
   fetchDoctors,
+  fetchPendingBilling,
+  fetchPrescription,
+  createBilling,
 } = useStaff()
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -32,6 +35,16 @@ const selectedPatient = ref(null)
 const showPatientModal = ref(false)
 const patientLoading = ref(false)
 const actionLoadingId = ref(null) // tracks which row is loading
+
+// ─── Billing State ──────────────────────────────────────────────────────────
+const BASE_CONSULT_CENTS = 2000 // $20.00 SGD base consultation fee
+const pendingBilling = ref([])
+const billingLoading = ref(false)
+const expandedBillingId = ref(null)
+const prescriptionMap = ref({})    // appointmentId → [memos]
+const billingAmounts = ref({})     // appointmentId → amount in cents
+const billingSubmitting = ref(null)
+const billingSuccess = ref('')
 
 let queueWs = null
 let reconnectTimer = null
@@ -194,9 +207,72 @@ async function handleViewPatient(patientId) {
   }
 }
 
+// ─── Billing Actions ─────────────────────────────────────────────────────────
+async function loadPendingBilling() {
+  billingLoading.value = true
+  try {
+    const items = await fetchPendingBilling()
+    pendingBilling.value = items ?? []
+    // Initialise default amounts for new items
+    for (const appt of pendingBilling.value) {
+      if (!(appt.id in billingAmounts.value)) {
+        billingAmounts.value[appt.id] = BASE_CONSULT_CENTS
+      }
+    }
+  } catch (e) {
+    actionError.value = e.message ?? 'Failed to load pending billing'
+  } finally {
+    billingLoading.value = false
+  }
+}
+
+async function toggleBillingExpand(appointmentId) {
+  if (expandedBillingId.value === appointmentId) {
+    expandedBillingId.value = null
+    return
+  }
+  expandedBillingId.value = appointmentId
+  // Load prescription if not cached
+  if (!prescriptionMap.value[appointmentId]) {
+    try {
+      const memos = await fetchPrescription(appointmentId)
+      prescriptionMap.value[appointmentId] = memos ?? []
+    } catch (e) {
+      actionError.value = e.message ?? 'Failed to load billing details'
+      prescriptionMap.value[appointmentId] = []
+    }
+  }
+}
+
+function formatDollars(cents) {
+  return `$${(cents / 100).toFixed(2)}`
+}
+
+async function handleSubmitBilling(appt) {
+  billingSubmitting.value = appt.id
+  billingSuccess.value = ''
+  actionError.value = ''
+  try {
+    await createBilling({
+      appointmentId: appt.id,
+      amountCents: billingAmounts.value[appt.id] ?? BASE_CONSULT_CENTS,
+      currency: 'sgd',
+    })
+    billingSuccess.value = `Billing created for appointment ${appt.id.slice(0, 8).toUpperCase()}. Payment link is ready for the patient.`
+    setTimeout(() => { billingSuccess.value = '' }, 4000)
+    // Remove from pending list
+    pendingBilling.value = pendingBilling.value.filter((a) => a.id !== appt.id)
+  } catch (e) {
+    actionError.value = e.message ?? 'Failed to submit billing'
+  } finally {
+    billingSubmitting.value = null
+  }
+}
+
 onMounted(() => {
   loadDoctors()
   connectQueueSocket()
+  loadPendingBilling()
 })
 
 onUnmounted(() => {
@@ -479,6 +555,138 @@ onUnmounted(() => {
             <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
               On Duty
             </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Pending Billing ──────────────────────────────────────────── -->
+      <section aria-labelledby="billing-heading">
+        <h2 id="billing-heading" class="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
+          Pending Billing
+        </h2>
+
+        <!-- Billing success -->
+        <div
+          v-if="billingSuccess"
+          role="status"
+          class="mb-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700"
+        >
+          {{ billingSuccess }}
+        </div>
+
+        <!-- Loading -->
+        <div v-if="billingLoading" class="space-y-3">
+          <div v-for="i in 2" :key="i" class="bg-white rounded-2xl border border-slate-200 p-4 animate-pulse">
+            <div class="h-4 w-48 bg-slate-100 rounded" />
+          </div>
+        </div>
+
+        <!-- Empty -->
+        <div
+          v-else-if="pendingBilling.length === 0"
+          class="bg-white rounded-2xl border border-slate-200 p-6 text-center"
+        >
+          <p class="text-sm text-slate-500">No consultations awaiting billing.</p>
+        </div>
+
+        <!-- Billing rows -->
+        <div v-else class="space-y-3">
+          <div
+            v-for="appt in pendingBilling"
+            :key="appt.id"
+            class="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+          >
+            <!-- Summary row — click to expand -->
+            <button
+              type="button"
+              class="w-full text-left px-5 py-4 flex items-center justify-between gap-4 hover:bg-slate-50 transition-colors cursor-pointer"
+              @click="toggleBillingExpand(appt.id)"
+            >
+              <div class="min-w-0">
+                <p class="font-heading font-semibold text-sm text-text truncate">
+                  Appointment {{ appt.id.slice(0, 8).toUpperCase() }}
+                </p>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  Patient: {{ appt.patient_id?.slice(0, 8) ?? '—' }}
+                  <span v-if="appt.date"> · {{ appt.date }}</span>
+                </p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                  Awaiting Billing
+                </span>
+                <svg
+                  class="w-4 h-4 text-slate-400 transition-transform duration-200"
+                  :class="{ 'rotate-180': expandedBillingId === appt.id }"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                </svg>
+              </div>
+            </button>
+
+            <!-- Expanded detail -->
+            <div v-if="expandedBillingId === appt.id" class="border-t border-slate-100 px-5 py-4 space-y-4">
+
+              <!-- Prescription / MC memos -->
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Prescription &amp; MC</p>
+                <div v-if="!prescriptionMap[appt.id]" class="text-xs text-slate-400 animate-pulse">Loading...</div>
+                <div v-else-if="prescriptionMap[appt.id].length === 0" class="text-xs text-slate-400">
+                  No prescription or MC recorded for this consultation.
+                </div>
+                <div v-else class="space-y-2">
+                  <div
+                    v-for="memo in prescriptionMap[appt.id]"
+                    :key="memo.id"
+                    class="bg-slate-50 rounded-xl px-4 py-3"
+                  >
+                    <p class="text-xs font-semibold text-slate-600 capitalize">{{ memo.record_type }}</p>
+                    <p class="text-sm text-text mt-1 whitespace-pre-wrap">{{ memo.content }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Amount input -->
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Billing Amount (SGD)</p>
+                <div class="flex items-center gap-3">
+                  <div class="relative flex-1 max-w-[200px]">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      class="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                      :value="(billingAmounts[appt.id] ?? BASE_CONSULT_CENTS) / 100"
+                      @input="billingAmounts[appt.id] = Math.max(0, Math.round(parseFloat($event.target.value || 0) * 100))"
+                    />
+                  </div>
+                  <span class="text-xs text-slate-400">
+                    Base: {{ formatDollars(BASE_CONSULT_CENTS) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Submit button -->
+              <div class="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-50"
+                  :disabled="billingSubmitting === appt.id || (billingAmounts[appt.id] ?? BASE_CONSULT_CENTS) <= 0"
+                  @click="handleSubmitBilling(appt)"
+                >
+                  <svg v-if="billingSubmitting === appt.id" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+                    <path fill="currentColor" class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
+                  </svg>
+                  Submit Billing
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </section>

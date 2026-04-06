@@ -56,9 +56,10 @@ async function uploadLocally(
     const filePath = path.join(patientDir, uniqueName);
     fs.writeFileSync(filePath, buffer);
 
-    // Return a path that will be served by Express static middleware
-    const port = process.env.PORT ?? "3005";
-    return `http://patient-service:${port}/uploads/${patientId}/${uniqueName}`;
+    // Return a relative path served via Kong → patient-service static middleware.
+    // The frontend prepends VITE_API_BASE_URL (e.g. http://localhost:8000) so
+    // the browser can reach the file through Kong's /api/patients/* route.
+    return `/api/patients/uploads/${patientId}/${uniqueName}`;
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────

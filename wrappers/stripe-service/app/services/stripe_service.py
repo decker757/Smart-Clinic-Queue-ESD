@@ -5,6 +5,10 @@ stripe.api_key = settings.STRIPE_API_KEY
 
 
 def create_checkout_session(amount: int, currency: str, consultation_id: str, patient_id: str):
+    metadata = {
+        "consultation_id": consultation_id,
+        "patient_id": patient_id,
+    }
     return stripe.checkout.Session.create(
         payment_method_types=["card"],
         line_items=[{
@@ -18,10 +22,8 @@ def create_checkout_session(amount: int, currency: str, consultation_id: str, pa
         mode="payment",
         success_url=settings.STRIPE_SUCCESS_URL or f"{settings.FRONTEND_BASE_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=settings.STRIPE_CANCEL_URL or f"{settings.FRONTEND_BASE_URL}/cancel",
-        metadata={
-            "consultation_id": consultation_id,
-            "patient_id": patient_id,
-        },
+        metadata=metadata,
+        payment_intent_data={"metadata": metadata},
     )
 
 

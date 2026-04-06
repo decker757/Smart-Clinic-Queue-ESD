@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 stripe.api_key = settings.STRIPE_API_KEY
 
+from typing import Optional
 from pydantic import BaseModel
 from app.services.stripe_service import create_checkout_session
 from app.config.settings import settings as app_settings
@@ -20,13 +21,23 @@ router = APIRouter()
 class CreateSessionRequest(BaseModel):
     appointment_id: str
     patient_id: str
+    amount_cents: Optional[int] = None   # if omitted, uses CONSULTATION_FEE_CENTS
+    currency: Optional[str] = None       # if omitted, uses settings.CURRENCY
 
 
 @router.post("/create-session")
 async def create_session(body: CreateSessionRequest):
+    amount = body.amount_cents if body.amount_cents is not None else app_settings.CONSULTATION_FEE_CENTS
+    currency_value = body.currency if body.currency is not None else app_settings.CURRENCY
+    currency = currency_value.strip().lower()
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="amount_cents must be greater than 0")
+    if len(currency) != 3 or not currency.isalpha():
+        raise HTTPException(status_code=400, detail="currency must be a 3-letter ISO code")
+
     session = create_checkout_session(
-        amount=app_settings.CONSULTATION_FEE_CENTS,
-        currency=app_settings.CURRENCY,
+        amount=amount,
+        currency=currency,
         consultation_id=body.appointment_id,
         patient_id=body.patient_id,
     )
@@ -71,6 +82,8 @@ async def _handle_event(event: dict) -> None:
             "consultation_id": metadata.get("consultation_id"),
             "patient_id": metadata.get("patient_id"),
             "payment_intent_id": obj.get("payment_intent"),
+            "amount_cents": obj.get("amount_total"),
+            "currency": obj.get("currency"),
             "timestamp": now,
         })
 
@@ -80,6 +93,8 @@ async def _handle_event(event: dict) -> None:
             "consultation_id": metadata.get("consultation_id"),
             "patient_id": metadata.get("patient_id"),
             "payment_intent_id": obj.get("id"),
+            "amount_cents": obj.get("amount"),
+            "currency": obj.get("currency"),
             "timestamp": now,
         })
 

@@ -23,6 +23,7 @@ async function loadDashboard() {
   try {
     appointment.value = await fetchDashboardData()
     fetchError.value = ''
+    await checkPendingPayments()
   } catch {
     fetchError.value = 'Could not load your appointment. Please refresh.'
   } finally {

@@ -73,6 +73,14 @@ async function loadMemos() {
   }
 }
 
+// Resolve file URLs: relative paths (from local Docker uploads) need the API
+// base prepended so the browser can reach them through Kong.
+function resolveFileUrl(url) {
+  if (!url) return url
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  return `${API_BASE}${url}`
+}
+
 function recordLabel(type) {
   if (type === 'mc') return 'Medical Certificate'
   if (type === 'prescription') return 'Prescription'
@@ -438,7 +446,7 @@ function cancelForms() {
             <p v-if="memo.content" class="text-sm text-text whitespace-pre-wrap">{{ memo.content }}</p>
             <a
               v-if="memo.file_url"
-              :href="memo.file_url"
+              :href="resolveFileUrl(memo.file_url)"
               target="_blank"
               rel="noopener noreferrer"
               class="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
