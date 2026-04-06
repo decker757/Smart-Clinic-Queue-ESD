@@ -216,6 +216,9 @@ register payment-service <<EOF
     "environment": [
       {"name": "DATABASE_URL", "value": "$DB_URL"},
       {"name": "RABBITMQ_URL", "value": "$MQ_URL"},
+      {"name": "JWKS_URL", "value": "$COGNITO_JWKS_URL"},
+      {"name": "STRIPE_SERVICE_URL", "value": "http://stripe-service.$NS:8001"},
+      {"name": "APPOINTMENT_SERVICE_URL", "value": "http://appointment-service.$NS:3001"},
       {"name": "PORT", "value": "3008"}
     ],
     "logConfiguration": $(log payment-service)
@@ -335,6 +338,7 @@ register composite-patient-orchestrator <<EOF
     "environment": [
       {"name": "JWKS_URL", "value": "$COGNITO_JWKS_URL"},
       {"name": "PATIENT_SERVICE_GRPC", "value": "patient-service.$NS:50053"},
+      {"name": "PAYMENT_SERVICE_URL", "value": "http://payment-service.$NS:3008"},
       {"name": "RABBITMQ_URL", "value": "$MQ_URL"},
       {"name": "PORT", "value": "8001"}
     ],
@@ -361,7 +365,6 @@ register composite-consultation <<EOF
       {"name": "PATIENT_SERVICE_GRPC", "value": "patient-service.$NS:50053"},
       {"name": "DOCTOR_SERVICE_GRPC", "value": "doctor-service.$NS:50055"},
       {"name": "QUEUE_SERVICE_GRPC", "value": "queue-coordinator-service.$NS:50052"},
-      {"name": "PAYMENT_SERVICE_GRPC", "value": "stripe-service.$NS:50051"},
       {"name": "RABBITMQ_URL", "value": "$MQ_URL"},
       {"name": "PORT", "value": "8002"}
     ],
@@ -385,6 +388,8 @@ register composite-staff-orchestrator <<EOF
     "environment": [
       {"name": "JWKS_URL", "value": "$COGNITO_JWKS_URL"},
       {"name": "APPOINTMENT_SERVICE_URL", "value": "http://appointment-service.$NS:3001"},
+      {"name": "PAYMENT_SERVICE_URL", "value": "http://payment-service.$NS:3008"},
+      {"name": "PATIENT_SERVICE_URL", "value": "http://patient-service.$NS:3007"},
       {"name": "DOCTOR_SERVICE_GRPC", "value": "doctor-service.$NS:50055"},
       {"name": "PATIENT_SERVICE_GRPC", "value": "patient-service.$NS:50053"},
       {"name": "QUEUE_SERVICE_GRPC", "value": "queue-coordinator-service.$NS:50052"},

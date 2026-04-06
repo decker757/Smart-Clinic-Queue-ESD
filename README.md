@@ -66,9 +66,9 @@ Method-specific routes are used (not `ANY`) so OPTIONS preflight requests bypass
 | `POST /api/check-in` | Cognito JWT | checkin-orchestrator |
 | `POST /api/check-in/{proxy+}` | Cognito JWT | checkin-orchestrator |
 | `GET/POST /api/queue/{proxy+}` | Cognito JWT | queue-coordinator |
-| `GET/POST /api/consultation/{proxy+}` | Cognito JWT | composite-consultation |
-| `GET/POST /api/staff/{proxy+}` | Cognito JWT | composite-staff-orchestrator |
-| `GET/POST/PUT /api/patient/{proxy+}` | Cognito JWT | composite-patient-orchestrator |
+| `GET/POST /api/composite/consultations/{proxy+}` | Cognito JWT | composite-consultation |
+| `GET/POST /api/composite/staff/{proxy+}` | Cognito JWT | composite-staff-orchestrator |
+| `GET/POST/PUT /api/composite/patients/{proxy+}` | Cognito JWT | composite-patient-orchestrator |
 | `GET/POST /api/payments/{proxy+}` | Cognito JWT | payment-service |
 | `POST /api/stripe/webhook` | None (Stripe signature) | stripe-service |
 
@@ -82,9 +82,9 @@ The ALB receives traffic from both API Gateway and CloudFront (WebSocket path on
 | `/api/queue/*` | queue-coordinator-service | 3002 |
 | `/api/composite/appointments*` | composite-appointment | 8000 |
 | `/api/check-in*` | checkin-orchestrator | 8000 |
-| `/api/consultation*` | composite-consultation | 8002 |
-| `/api/staff*` | composite-staff-orchestrator | 8004 |
-| `/api/patient*` | composite-patient-orchestrator | 8001 |
+| `/api/composite/consultations*` | composite-consultation | 8002 |
+| `/api/composite/staff*` | composite-staff-orchestrator | 8004 |
+| `/api/composite/patients*` | composite-patient-orchestrator | 8001 |
 | `/api/payments*` | payment-service | 3008 |
 | `/api/appointments*` | appointment-service | 3001 |
 
@@ -445,9 +445,9 @@ All tasks share one security group. Add a self-referencing inbound rule (all tra
 | 2 | `/api/queue/*` | queue-coordinator |
 | 3 | `/api/composite/appointments*` | composite-appointment |
 | 4 | `/api/check-in*` | checkin-orchestrator |
-| 5 | `/api/consultation*` | composite-consultation |
-| 6 | `/api/staff*` | composite-staff-orchestrator |
-| 7 | `/api/patient*` | composite-patient-orchestrator |
+| 5 | `/api/composite/consultations*` | composite-consultation |
+| 6 | `/api/composite/staff*` | composite-staff-orchestrator |
+| 7 | `/api/composite/patients*` | composite-patient-orchestrator |
 | 8 | `/api/payments*` | payment-service |
 | 9 | `/api/appointments*` | appointment-service |
 
@@ -631,7 +631,7 @@ JWT_SECRET=local-dev-secret
 
 **`infra/env/notification.env`** — Already defaults to `SMS_ENABLED=false`, so Twilio credentials are not needed for local. Notifications are logged to console instead.
 
-**`infra/env/stripe-service.env`** — Stripe credentials are optional. Without them, the consultation flow completes but skips payment link generation:
+**`infra/env/stripe-service.env`** — Stripe credentials are optional. Without them, consultations and billing still work, but staff cannot generate Stripe payment links and patients will not see a payable link in appointment history:
 ```
 STRIPE_API_KEY=sk_test_...           # optional
 STRIPE_WEBHOOK_SIGNING_SECRET=whsec_... # optional (get from `stripe listen`)
@@ -729,7 +729,7 @@ sh scripts/seed-users.sh
 | Login returns 500 | Check `docker compose logs auth-service`. Usually a missing `BETTER_AUTH_SECRET`. |
 | Check-in always returns "on time" | Google Maps API key not set. ETA service uses 15-min default fallback. |
 | Queue not updating in real time | Check WebSocket in browser DevTools → Network → WS tab. |
-| Payment link not returned after consultation | Stripe keys not configured. Consultation still completes, just without payment. |
+| Payment link not available after staff submits billing | Stripe keys not configured or Stripe webhook/session setup is invalid. Consultations still complete, but billing cannot produce a payable Stripe link. |
 
 ---
 
@@ -745,7 +745,7 @@ sh scripts/seed-users.sh
 - **Atomic services** do not call each other directly — all cross-service orchestration goes through composite services
 - **Composite services** call multiple atomics via gRPC and publish RabbitMQ events for side effects
 - **Wrapper services** wrap external APIs (Google Maps, Stripe, Twilio) and expose gRPC or HTTP interfaces
-- **Synchronous calls** (gRPC) for critical state changes (e.g. creating a payment link before responding to the client)
+- **Synchronous calls** for critical state changes (e.g. completing a consultation or creating a billing session before responding to the client)
 - **Async MQ events** for side effects (notifications, logging, queue updates, payment history)
 
 ## Contributing
