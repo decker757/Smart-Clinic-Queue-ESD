@@ -40,30 +40,28 @@ fail() { echo "  ✗ FAIL: $1"; exit 1; }
 
 # Run SQL against the configured DB, using docker compose exec for local Docker mode.
 db_exec() {
-  SEARCH_PATH="$1"; shift
-  SQL="SET search_path TO $SEARCH_PATH; $1"
-
+  SQL="$1"
   if [ "$LOCAL_DOCKER_DB" = "true" ]; then
     docker compose -f "$COMPOSE_FILE" exec -T app-db \
-      psql -U app -d clinic -v ON_ERROR_STOP=1 -c "$SQL" -t -A 2>/dev/null
+      psql -U app -d clinic -v ON_ERROR_STOP=1 -q -c "$SQL" -t -A 2>/dev/null
   elif command -v psql >/dev/null 2>&1; then
-    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "$SQL" -t -A 2>/dev/null
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -c "$SQL" -t -A 2>/dev/null
   else
     docker run --rm postgres:16-alpine \
-      psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "$SQL" -t -A 2>/dev/null
+      psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -c "$SQL" -t -A 2>/dev/null
   fi
 }
 
 supabase_exec() {
-  db_exec betterauth "$1"
+  db_exec "$1"
 }
 
 doctors_exec() {
-  db_exec doctors "$1"
+  db_exec "$1"
 }
 
 appt_exec() {
-  db_exec appointments "$1"
+  db_exec "$1"
 }
 
 signup() {
@@ -92,7 +90,7 @@ DOCTOR_EMAIL="doctor@clinic.com"
 DOCTOR_PASSWORD="password123"
 DOCTOR_NAME="Dr Test"
 
-EXISTING=$(supabase_exec "SELECT id FROM \"user\" WHERE email = '$DOCTOR_EMAIL'")
+EXISTING=$(supabase_exec "SELECT id FROM betterauth.\"user\" WHERE email = '$DOCTOR_EMAIL'")
 if [ -n "$EXISTING" ]; then
   DOCTOR_ID="$EXISTING"
   skip "Doctor account already exists (id=$DOCTOR_ID)"
@@ -102,16 +100,16 @@ else
   pass "Doctor account created (id=$DOCTOR_ID)"
 fi
 
-supabase_exec "UPDATE \"user\" SET role = 'doctor' WHERE id = '$DOCTOR_ID'" > /dev/null
+supabase_exec "UPDATE betterauth.\"user\" SET role = 'doctor' WHERE id = '$DOCTOR_ID'" > /dev/null
 pass "Role set to 'doctor'"
 
-doctors_exec "INSERT INTO doctors (id, name, specialisation, contact)
+doctors_exec "INSERT INTO doctors.doctors (id, name, specialisation, contact)
               VALUES ('$DOCTOR_ID', '$DOCTOR_NAME', 'General Practice', 'doctor@clinic.com')
               ON CONFLICT (id) DO NOTHING" > /dev/null
 pass "doctors.doctors record upserted"
 
 # Also insert into appointments.doctors so the FK on appointments.appointments.doctor_id works
-appt_exec "INSERT INTO doctors (id, name, specialization, slot_capacity)
+appt_exec "INSERT INTO appointments.doctors (id, name, specialization, slot_capacity)
            VALUES ('$DOCTOR_ID', '$DOCTOR_NAME', 'General Practice', 1)
            ON CONFLICT (id) DO NOTHING" > /dev/null
 pass "appointments.doctors record upserted (FK sync)"
@@ -127,7 +125,7 @@ STAFF_EMAIL="staff@clinic.com"
 STAFF_PASSWORD="password123"
 STAFF_NAME="Clinic Staff"
 
-EXISTING=$(supabase_exec "SELECT id FROM \"user\" WHERE email = '$STAFF_EMAIL'")
+EXISTING=$(supabase_exec "SELECT id FROM betterauth.\"user\" WHERE email = '$STAFF_EMAIL'")
 if [ -n "$EXISTING" ]; then
   STAFF_ID="$EXISTING"
   skip "Staff account already exists (id=$STAFF_ID)"
@@ -137,7 +135,7 @@ else
   pass "Staff account created (id=$STAFF_ID)"
 fi
 
-supabase_exec "UPDATE \"user\" SET role = 'staff' WHERE id = '$STAFF_ID'" > /dev/null
+supabase_exec "UPDATE betterauth.\"user\" SET role = 'staff' WHERE id = '$STAFF_ID'" > /dev/null
 pass "Role set to 'staff'"
 
 echo "  email:    $STAFF_EMAIL"
@@ -151,7 +149,7 @@ PATIENT_EMAIL="patient@clinic.com"
 PATIENT_PASSWORD="password123"
 PATIENT_NAME="Test Patient"
 
-EXISTING=$(supabase_exec "SELECT id FROM \"user\" WHERE email = '$PATIENT_EMAIL'")
+EXISTING=$(supabase_exec "SELECT id FROM betterauth.\"user\" WHERE email = '$PATIENT_EMAIL'")
 if [ -n "$EXISTING" ]; then
   PATIENT_ID="$EXISTING"
   skip "Patient account already exists (id=$PATIENT_ID)"
