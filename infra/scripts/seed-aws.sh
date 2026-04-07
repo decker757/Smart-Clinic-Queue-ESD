@@ -52,8 +52,9 @@ db_exec() {
 # Returns the Cognito sub (user ID)
 ensure_cognito_user() {
   EMAIL="$1"; NAME="$2"; ROLE="$3"
-  # Derive a simple username from the email local part (e.g. staff@clinic.com -> staff)
-  USERNAME=$(echo "$EMAIL" | cut -d@ -f1)
+  # This Cognito pool is configured with email sign-in, so the username must
+  # itself be the full email address.
+  USERNAME="$EMAIL"
 
   # Check if already exists
   echo "  [checking $USERNAME in Cognito...]" >&2
