@@ -9,6 +9,9 @@ class Settings:
     APPOINTMENT_SERVICE_URL: str = os.getenv(
         "APPOINTMENT_SERVICE_URL", "http://appointment-service:3001"
     )
+    PAYMENT_SERVICE_URL: str = os.getenv(
+        "PAYMENT_SERVICE_URL", "http://payment-service:3008"
+    )
     PATIENT_SERVICE_GRPC: str = os.getenv(
         "PATIENT_SERVICE_GRPC", "patient-service:50053"
     )

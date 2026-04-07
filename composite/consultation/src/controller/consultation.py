@@ -23,6 +23,7 @@ from src.services import (
     appointment as appointment_svc,
     doctor as doctor_svc,
     patient as patient_svc,
+    payment as payment_svc,
     rabbitmq,
 )
 
@@ -109,12 +110,23 @@ async def complete_consultation(
             detail=f"Failed to mark appointment complete: {e}",
         )
 
-    # ── Step 5: Publish consultation.completed event ──────────
-    # Payment is no longer created automatically here. Instead, staff
-    # reviews the prescription and sets the final billing amount via
-    # the staff dashboard before a Stripe payment link is generated.
-    # Queue removal, notification, and activity logging happen
-    # asynchronously via RabbitMQ consumers on each service.
+    # ── Step 5: Create standard payment request ───────────────
+    try:
+        payment = await payment_svc.create_payment_request(
+            appointment_id=body.appointment_id,
+            token=token,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create payment request: {e}",
+        )
+
+    payment_link = payment.get("payment_link")
+
+    # ── Step 6: Publish consultation.completed event ──────────
     event_published = await rabbitmq.publish_event(
         "consultation.completed",
         {
@@ -124,6 +136,7 @@ async def complete_consultation(
             "mc_issued": bool(body.mc_days),
             "prescribed_medication": body.prescribed_medication,
             "diagnosis": body.diagnosis,
+            "payment_link": payment_link,
         },
     )
 
@@ -137,4 +150,5 @@ async def complete_consultation(
         doctor_id=body.doctor_id,
         status="completed",
         message=message,
+        payment_link=payment_link,
     )

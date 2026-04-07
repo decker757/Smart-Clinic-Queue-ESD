@@ -87,6 +87,20 @@ def mock_appointment():
 
 
 @pytest.fixture
+def mock_payment():
+    with patch(
+        "src.controller.consultation.payment_svc.create_payment_request",
+        new_callable=AsyncMock,
+    ) as m:
+        m.return_value = {
+            "payment_link": "https://checkout.stripe.com/pay/test-link",
+            "amount_cents": 5000,
+            "currency": "sgd",
+        }
+        yield m
+
+
+@pytest.fixture
 def mock_publish():
     with patch(
         "src.controller.consultation.rabbitmq.publish_event",
@@ -96,13 +110,14 @@ def mock_publish():
 
 
 @pytest.fixture
-def mocks(mock_auth, mock_patient, mock_doctor, mock_appointment, mock_publish):
+def mocks(mock_auth, mock_patient, mock_doctor, mock_appointment, mock_payment, mock_publish):
     return {
         "auth": mock_auth,
         "patient_create": mock_patient[0],
         "patient_history": mock_patient[1],
         "doctor": mock_doctor,
         "appointment": mock_appointment,
+        "payment": mock_payment,
         "publish": mock_publish,
     }
 
@@ -130,25 +145,25 @@ async def test_happy_path(mocks):
     body = res.json()
     assert body["status"] == "completed"
     assert body["appointment_id"] == "appt-1"
-    assert body["payment_link"] is None
+    assert body["payment_link"] == "https://checkout.stripe.com/pay/test-link"
 
     # MC + prescription both created
     assert mocks["patient_create"].call_count == 2
     mocks["appointment"].assert_called_once_with("appt-1", VALID_TOKEN)
+    mocks["payment"].assert_called_once_with(appointment_id="appt-1", token=VALID_TOKEN)
     mocks["publish"].assert_called_once()
     event = mocks["publish"].call_args[0][1]
     assert event["mc_issued"] is True
     assert event["diagnosis"] == "Common cold"
-    assert "payment_link" not in event
+    assert event["payment_link"] == "https://checkout.stripe.com/pay/test-link"
 
 
-async def test_consultation_event_omits_payment_link(mocks):
-    """Billing happens later, so the consultation event must not carry a payment link."""
+async def test_consultation_event_includes_payment_link(mocks):
     res = await post()
 
     assert res.status_code == 200
     event = mocks["publish"].call_args[0][1]
-    assert "payment_link" not in event
+    assert event["payment_link"] == "https://checkout.stripe.com/pay/test-link"
 
 
 async def test_no_mc_skips_mc_record(mocks):
@@ -189,6 +204,7 @@ async def test_mc_record_grpc_failure_returns_500(mocks):
     assert res.status_code == 500
     assert "MC" in res.json()["detail"]
     mocks["appointment"].assert_not_called()
+    mocks["payment"].assert_not_called()
     mocks["publish"].assert_not_called()
 
 
@@ -201,6 +217,16 @@ async def test_appointment_failure_returns_500(mocks):
     res = await post()
 
     assert res.status_code == 500
+    mocks["payment"].assert_not_called()
+    mocks["publish"].assert_not_called()
+
+
+async def test_payment_failure_returns_error(mocks):
+    mocks["payment"].side_effect = HTTPException(status_code=502, detail="payment-service unavailable")
+
+    res = await post()
+
+    assert res.status_code == 502
     mocks["publish"].assert_not_called()
 
 

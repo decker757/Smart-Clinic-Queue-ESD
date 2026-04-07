@@ -376,6 +376,7 @@ register composite-consultation <<EOF
     "environment": [
       {"name": "JWKS_URL", "value": "$COGNITO_JWKS_URL"},
       {"name": "APPOINTMENT_SERVICE_URL", "value": "http://appointment-service.$NS:3001"},
+      {"name": "PAYMENT_SERVICE_URL", "value": "http://payment-service.$NS:3008"},
       {"name": "PATIENT_SERVICE_GRPC", "value": "patient-service.$NS:50053"},
       {"name": "DOCTOR_SERVICE_GRPC", "value": "doctor-service.$NS:50055"},
       {"name": "QUEUE_SERVICE_GRPC", "value": "queue-coordinator-service.$NS:50052"},

@@ -8,7 +8,7 @@
 #   - Appointment service: status → completed (HTTP PATCH)
 #   - RabbitMQ: consultation.completed published
 #   - Queue coordinator: patient removed from queue (async)
-#   - Staff billing flow: pending billing → prescription review → payment link creation
+#   - Standard fixed-fee payment link is generated automatically on completion
 #   - Patient payment history shows the generated pending payment
 #
 # ── PREREQUISITE: Doctor account ─────────────────────────────────────────────
@@ -54,11 +54,9 @@ BASE_PATIENT="$KONG/api/composite/patients"
 
 DOCTOR_EMAIL="${DOCTOR_EMAIL:-doctor@clinic.com}"
 DOCTOR_PASSWORD="${DOCTOR_PASSWORD:-password123}"
-STAFF_EMAIL="${STAFF_EMAIL:-staff@clinic.com}"
-STAFF_PASSWORD="${STAFF_PASSWORD:-password123}"
 PATIENT_EMAIL="consult-$(date +%s)@test.com"
 PATIENT_PASSWORD="password123"
-BILLING_AMOUNT_CENTS="${BILLING_AMOUNT_CENTS:-3500}"
+STANDARD_PAYMENT_AMOUNT_CENTS="${STANDARD_PAYMENT_AMOUNT_CENTS:-5000}"
 
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ FAIL: $1"; exit 1; }
@@ -112,28 +110,9 @@ DOCTOR_JWT=$(curl -sf "$BASE_AUTH/token" \
 [ -z "$DOCTOR_JWT" ] || [ "$DOCTOR_JWT" = "null" ] && fail "Could not get doctor JWT"
 pass "Doctor JWT acquired"
 
-# ── 2. Staff auth ─────────────────────────────────────────────────────────────
+# ── 2. Patient setup ──────────────────────────────────────────────────────────
 echo ""
-echo "━━━ STEP 2: Staff sign-in ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-STAFF_SIGNIN=$(curl -sf -X POST "$BASE_AUTH/sign-in/email" \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"$STAFF_EMAIL\",\"password\":\"$STAFF_PASSWORD\"}")
-echo "$STAFF_SIGNIN" | jq .
-STAFF_SESSION=$(echo "$STAFF_SIGNIN" | jq -r '.token')
-STAFF_USER_ID=$(echo "$STAFF_SIGNIN" | jq -r '.user.id')
-[ -z "$STAFF_USER_ID" ] || [ "$STAFF_USER_ID" = "null" ] && \
-  fail "Staff sign-in failed — run infra/scripts/seed-users.sh first"
-pass "Staff signed in (user_id=$STAFF_USER_ID)"
-
-STAFF_JWT=$(curl -sf "$BASE_AUTH/token" \
-  -H "Authorization: Bearer $STAFF_SESSION" | jq -r '.token')
-[ -z "$STAFF_JWT" ] || [ "$STAFF_JWT" = "null" ] && fail "Could not get staff JWT"
-pass "Staff JWT acquired"
-
-# ── 3. Patient setup ──────────────────────────────────────────────────────────
-echo ""
-echo "━━━ STEP 3: Patient signup + book appointment ━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━ STEP 2: Patient signup + book appointment ━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 curl -sf -X POST "$BASE_AUTH/sign-up/email" \
   -H "Content-Type: application/json" \
@@ -167,9 +146,9 @@ echo ""
 echo "--- Waiting 2s for appointment.booked event to create queue entry ---"
 sleep 2
 
-# ── 4. Verify queue entry ─────────────────────────────────────────────────────
+# ── 3. Verify queue entry ─────────────────────────────────────────────────────
 echo ""
-echo "━━━ STEP 4: Verify queue entry ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━ STEP 3: Verify queue entry ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 QUEUE_STATUS=""
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -180,9 +159,9 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
 done
 check_field "$QUEUE_STATUS" "waiting" "Queue entry status = waiting"
 
-# ── 5. Check in patient (direct queue call — check-in orchestrator tested separately) ─
+# ── 4. Check in patient (direct queue call — check-in orchestrator tested separately) ─
 echo ""
-echo "━━━ STEP 5: Check in patient ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━ STEP 4: Check in patient ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 curl -sf -X POST "$BASE_QUEUE/checkin/$APPT_ID" \
   -H "Authorization: Bearer $PATIENT_JWT" | jq .
@@ -190,9 +169,9 @@ QUEUE_STATUS=$(curl -sf "$BASE_QUEUE/position/$APPT_ID" \
   -H "Authorization: Bearer $PATIENT_JWT" | jq -r '.status')
 check_field "$QUEUE_STATUS" "checked_in" "Queue entry status = checked_in"
 
-# ── 6. Complete consultation ──────────────────────────────────────────────────
+# ── 5. Complete consultation ──────────────────────────────────────────────────
 echo ""
-echo "━━━ STEP 6: Doctor completes consultation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━ STEP 5: Doctor completes consultation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 TODAY=$(date -u '+%Y-%m-%d')
 RESULT=$(curl -sf -X POST "$KONG/api/composite/consultations/complete" \
@@ -213,15 +192,17 @@ echo "$RESULT" | jq .
 STATUS=$(echo "$RESULT" | jq -r '.status')
 PAYMENT_LINK=$(echo "$RESULT" | jq -r '.payment_link')
 check_field "$STATUS" "completed" "Consultation status = completed"
-check_field "$PAYMENT_LINK" "null" "Consultation response omits payment link"
+[ -n "$PAYMENT_LINK" ] && [ "$PAYMENT_LINK" != "null" ] && \
+  pass "Consultation response includes Stripe payment link" || \
+  fail "Consultation did not return a payment link"
 
 echo ""
 echo "--- Waiting 2s for consultation.completed RabbitMQ event to propagate ---"
 sleep 2
 
-# ── 7. Verify consultation side effects ───────────────────────────────────────
+# ── 6. Verify consultation side effects ───────────────────────────────────────
 echo ""
-echo "━━━ STEP 7: Verify consultation side effects ━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━ STEP 6: Verify consultation side effects ━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 echo ""
 echo "--- Appointment status (via appointment-service) ---"
@@ -247,58 +228,30 @@ echo "--- Notification service logs (should show consultation.completed SMS) ---
 docker logs infra-notification-service-1 --tail 10 2>/dev/null || \
   echo "(run via docker compose to see logs)"
 
-# ── 8. Staff billing flow ─────────────────────────────────────────────────────
+# ── 7. Verify automatic payment flow ──────────────────────────────────────────
 echo ""
-echo "━━━ STEP 8: Staff creates billing ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━ STEP 7: Verify automatic payment flow ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 echo ""
-echo "--- Pending billing includes the completed appointment ---"
-PENDING=$(curl -sf "$BASE_STAFF/billing/pending" \
-  -H "Authorization: Bearer $STAFF_JWT")
-echo "$PENDING" | jq .
-PENDING_COUNT=$(echo "$PENDING" | jq -r --arg APPT "$APPT_ID" '[.[] | select(.id == $APPT)] | length')
-[ "$PENDING_COUNT" -ge 1 ] && pass "Completed appointment appears in pending billing" || \
-  fail "Completed appointment missing from pending billing list"
-
-echo ""
-echo "--- Prescription + MC records are visible to staff ---"
-PRESCRIPTION=$(curl -sf "$BASE_STAFF/billing/$APPT_ID/prescription" \
-  -H "Authorization: Bearer $STAFF_JWT")
-echo "$PRESCRIPTION" | jq .
-PRESCRIPTION_COUNT=$(echo "$PRESCRIPTION" | jq -r 'length')
-[ "$PRESCRIPTION_COUNT" -ge 2 ] && pass "Staff can review prescription and MC memos" || \
-  fail "Expected prescription and MC memos for billing review"
-
-echo ""
-echo "--- Staff submits billing and receives Stripe checkout link ---"
-BILLING=$(curl -sf -X POST "$BASE_STAFF/billing/create" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $STAFF_JWT" \
-  -d "{\"appointment_id\":\"$APPT_ID\",\"amount_cents\":$BILLING_AMOUNT_CENTS,\"currency\":\"sgd\"}")
-echo "$BILLING" | jq .
-BILLING_STATUS=$(echo "$BILLING" | jq -r '.status')
-BILLING_PAYMENT_LINK=$(echo "$BILLING" | jq -r '.payment_link')
-check_field "$BILLING_STATUS" "pending" "Billing record status = pending"
-[ -n "$BILLING_PAYMENT_LINK" ] && [ "$BILLING_PAYMENT_LINK" != "null" ] && \
-  pass "Stripe payment link created after staff billing" || \
-  fail "Billing did not return a Stripe payment link"
-
-echo ""
-echo "--- Patient payment history shows the billed amount ---"
+echo "--- Patient payment history shows the standard fixed amount ---"
 PATIENT_PAYMENTS=$(curl -sf "$BASE_PATIENT/$PATIENT_ID/payments" \
   -H "Authorization: Bearer $PATIENT_JWT")
 echo "$PATIENT_PAYMENTS" | jq .
 PATIENT_PAYMENT_STATUS=$(echo "$PATIENT_PAYMENTS" | jq -r --arg APPT "$APPT_ID" '[.[] | select(.consultation_id == $APPT)][0].status')
 PATIENT_PAYMENT_AMOUNT=$(echo "$PATIENT_PAYMENTS" | jq -r --arg APPT "$APPT_ID" '[.[] | select(.consultation_id == $APPT)][0].amount_cents')
+PATIENT_PAYMENT_LINK=$(echo "$PATIENT_PAYMENTS" | jq -r --arg APPT "$APPT_ID" '[.[] | select(.consultation_id == $APPT)][0].payment_link')
 check_field "$PATIENT_PAYMENT_STATUS" "pending" "Patient payment status = pending"
-check_field "$PATIENT_PAYMENT_AMOUNT" "$BILLING_AMOUNT_CENTS" "Patient payment amount = billed amount"
+check_field "$PATIENT_PAYMENT_AMOUNT" "$STANDARD_PAYMENT_AMOUNT_CENTS" "Patient payment amount = standard fixed amount"
+[ -n "$PATIENT_PAYMENT_LINK" ] && [ "$PATIENT_PAYMENT_LINK" != "null" ] && \
+  pass "Patient payment history includes a payable link" || \
+  fail "Patient payment history is missing the payment link"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║        ALL CONSULTATION TESTS PASSED     ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
-echo "Billing payment link: $BILLING_PAYMENT_LINK"
+echo "Payment link: $PAYMENT_LINK"
 echo ""
 echo "Check RabbitMQ event delivery:"
 echo "  docker logs infra-queue-coordinator-service-1 --tail 20"

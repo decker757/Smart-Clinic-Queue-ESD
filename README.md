@@ -235,17 +235,12 @@ The seed script also inserts the doctor into the `doctors.doctors` and `appointm
    - Calls `patient-service` via gRPC → stores MC + prescription
    - Calls `doctor-service` via gRPC → stores consultation notes
    - Calls `appointment-service` → marks appointment `completed`
+   - Calls `payment-service` → creates a standard fixed SGD `$50` Stripe checkout link
 3. Publishes `consultation.completed` → `queue-coordinator` removes patient from queue
-4. Payment is **not** created automatically — staff handles billing separately (see Scenario 3b)
+4. Patient receives or sees the payment link and can pay immediately
 
 ### Scenario 3b — Staff Designates Billing
-1. Staff opens the **Pending Billing** section on the staff dashboard
-2. `staff-orchestrator` fetches completed appointments without payment records
-3. Staff expands an appointment → sees the prescription and MC memos
-4. Staff sets the total amount (base $20 SGD consultation fee + medication surcharges)
-5. Staff submits billing → `staff-orchestrator` calls `payment-service` → `stripe-service` creates Stripe checkout session
-6. Patient sees the payment link in their appointment history and can pay
-7. Patient pays → Stripe webhook → `payment.completed` / `payment.failed`
+This flow still exists in the codebase, but the default demo path uses the automatic fixed-fee payment flow in Scenario 3 instead.
 
 ### Scenario 4 — Real-Time Queue Updates
 
@@ -656,7 +651,7 @@ JWT_SECRET=local-dev-secret
 
 **`infra/env/notification.env`** — Already defaults to `SMS_ENABLED=false`, so Twilio credentials are not needed for local. Notifications are logged to console instead.
 
-**`infra/env/stripe-service.env`** — Stripe credentials are optional. Without them, consultations and billing still work, but staff cannot generate Stripe payment links and patients will not see a payable link in appointment history:
+**`infra/env/stripe-service.env`** — Stripe credentials are optional. Without them, consultations still complete, but automatic payment links cannot be generated and patients will not see a payable link in appointment history:
 ```
 STRIPE_API_KEY=sk_test_...           # optional
 STRIPE_WEBHOOK_SIGNING_SECRET=whsec_... # optional (get from `stripe listen`)
@@ -754,7 +749,7 @@ sh scripts/seed-users.sh
 | Login returns 500 | Check `docker compose logs auth-service`. Usually a missing `BETTER_AUTH_SECRET`. |
 | Check-in always returns "on time" | Google Maps API key not set. ETA service uses 15-min default fallback. |
 | Queue not updating in real time | Check WebSocket in browser DevTools → Network → WS tab. |
-| Payment link not available after staff submits billing | Stripe keys not configured or Stripe webhook/session setup is invalid. Consultations still complete, but billing cannot produce a payable Stripe link. |
+| Payment link not available after consultation completion | Stripe keys not configured or Stripe webhook/session setup is invalid. Consultations still complete, but the automatic `$50` payment link cannot be generated. |
 
 ---
 
