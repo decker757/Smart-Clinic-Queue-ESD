@@ -17,8 +17,21 @@ def _get_jwks_client() -> PyJWKClient:
     return _jwks_client
 
 
+def _decode_kwargs() -> dict:
+    # AWS uses Cognito JWKS URLs; local Docker uses BetterAuth's JWKS endpoint.
+    if settings.JWKS_URL.endswith("/.well-known/jwks.json"):
+        return {
+            "issuer": settings.JWKS_URL.removesuffix("/.well-known/jwks.json"),
+            "options": {"verify_aud": False},
+        }
+    return {
+        "issuer": JWT_ISSUER,
+        "audience": JWT_AUDIENCE,
+    }
+
+
 async def verify_token(token: str) -> dict | None:
-    """Verify JWT token using Cognito JWKS.
+    """Verify JWT token in either local BetterAuth or AWS Cognito mode.
 
     Returns the decoded payload (includes 'sub' as user id) or None if invalid.
     """
@@ -29,8 +42,7 @@ async def verify_token(token: str) -> dict | None:
             token,
             signing_key.key,
             algorithms=["RS256"],
-            audience=JWT_AUDIENCE,
-            issuer=JWT_ISSUER,
+            **_decode_kwargs(),
         )
         return payload
     except jwt.PyJWTError:
