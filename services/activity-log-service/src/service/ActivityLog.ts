@@ -5,7 +5,9 @@
 
 import { ClinicEvent, ActivityLogEntry } from "../model/ActivityLog";
 
-const ACTIVITY_LOG_URL = "https://personal-vrhds9rw.outsystemscloud.com/smartclinicesd/rest/ActivityLogAPI/logs";
+const ACTIVITY_LOG_URL =
+    process.env.ACTIVITY_LOG_URL ??
+    "https://personal-vrhds9rw.outsystemscloud.com/smartclinicesd/rest/ActivityLogAPI/logs";
 
 export async function recordEvent(event: ClinicEvent): Promise<void> {
     try {

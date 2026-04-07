@@ -158,6 +158,7 @@ skills-lock.json
 *_pb2_grpc.py
 
 *.pem
+**/cookies.txt
 
 CLAUDE.md
 .claw

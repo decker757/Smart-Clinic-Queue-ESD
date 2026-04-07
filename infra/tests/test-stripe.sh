@@ -130,21 +130,29 @@ curl -sf -X POST "$BASE/webhook" \
 
 echo ""
 echo "=== 7. gRPC: CreatePaymentRequest (requires valid STRIPE_API_KEY) ==="
-grpcurl -plaintext \
-  -proto "$PROTO" \
-  -d "{
-    \"patient_id\": \"$PATIENT_ID\",
-    \"appointment_id\": \"$CONSULTATION_ID\"
-  }" \
-  "$GRPC" payment.PaymentService/CreatePaymentRequest | jq .
-# Expected: {"paymentId": "...", "paymentLink": "https://checkout.stripe.com/..."}
-# Note: requires a valid test STRIPE_API_KEY — will return gRPC INTERNAL error if key is invalid
+if command -v grpcurl >/dev/null 2>&1; then
+  grpcurl -plaintext \
+    -proto "$PROTO" \
+    -d "{
+      \"patient_id\": \"$PATIENT_ID\",
+      \"appointment_id\": \"$CONSULTATION_ID\"
+    }" \
+    "$GRPC" payment.PaymentService/CreatePaymentRequest | jq .
+  # Expected: {"paymentId": "...", "paymentLink": "https://checkout.stripe.com/..."}
+  # Note: requires a valid test STRIPE_API_KEY — will return gRPC INTERNAL error if key is invalid
+else
+  echo "SKIP: grpcurl not installed; skipping gRPC payment creation check"
+fi
 
 echo ""
 echo "=== 8. gRPC: server reflection (service list) ==="
-grpcurl -plaintext "$GRPC" list | grep -q "payment.PaymentService" && \
-  echo "payment.PaymentService is registered ✓" || \
-  echo "WARN: reflection not returning PaymentService"
+if command -v grpcurl >/dev/null 2>&1; then
+  grpcurl -plaintext "$GRPC" list | grep -q "payment.PaymentService" && \
+    echo "payment.PaymentService is registered ✓" || \
+    echo "WARN: reflection not returning PaymentService"
+else
+  echo "SKIP: grpcurl not installed; skipping gRPC reflection check"
+fi
 
 echo ""
 echo "=== 9. Verify RabbitMQ received payment.completed event ==="

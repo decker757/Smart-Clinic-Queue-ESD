@@ -11,7 +11,6 @@ DUAL MODE:
 
 import json
 import logging
-import ssl
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -39,24 +38,24 @@ def _make_redis() -> aioredis.Redis:
     parsed = urlparse(settings.REDIS_URL)
     use_ssl = parsed.scheme in ("rediss",)
 
-    ssl_ctx = None
+    kwargs = {
+        "host": parsed.hostname,
+        "port": parsed.port or 6379,
+        "password": parsed.password or None,
+        "ssl": use_ssl,
+        "decode_responses": True,
+        "socket_connect_timeout": 5,
+        "socket_timeout": 5,
+    }
+
     if use_ssl:
         # ElastiCache Serverless uses an AWS-internal CA not in the default
-        # Python trust bundle — skip certificate verification.
-        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
+        # Python trust bundle — skip certificate verification. redis-py
+        # expects these as keyword flags, not an SSLContext object.
+        kwargs["ssl_cert_reqs"] = "none"
+        kwargs["ssl_check_hostname"] = False
 
-    return aioredis.Redis(
-        host=parsed.hostname,
-        port=parsed.port or 6379,
-        password=parsed.password or None,
-        ssl=use_ssl,
-        ssl_context=ssl_ctx,
-        decode_responses=True,
-        socket_connect_timeout=5,
-        socket_timeout=5,
-    )
+    return aioredis.Redis(**kwargs)
 
 
 async def get_redis() -> Optional[aioredis.Redis]:

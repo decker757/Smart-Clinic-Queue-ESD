@@ -383,20 +383,28 @@ echo "━━━ PART 3: gRPC ━━━━━━━━━━━━━━━━━
 
 echo ""
 echo "--- G1. Service reflection (PaymentService registered) ---"
-grpcurl -plaintext "$GRPC_STRIPE" list 2>/dev/null | grep -q "payment.PaymentService" && \
-  echo "payment.PaymentService ✓" || \
-  echo "WARN: reflection not returning PaymentService (is stripe-service running?)"
+if command -v grpcurl >/dev/null 2>&1; then
+  grpcurl -plaintext "$GRPC_STRIPE" list 2>/dev/null | grep -q "payment.PaymentService" && \
+    echo "payment.PaymentService ✓" || \
+    echo "WARN: reflection not returning PaymentService (is stripe-service running?)"
+else
+  echo "SKIP: grpcurl not installed; skipping reflection check"
+fi
 
 echo ""
 echo "--- G2. CreatePaymentRequest (requires valid STRIPE_API_KEY) ---"
-grpcurl -plaintext \
-  -proto "$PROTO" \
-  -d "{
-    \"appointment_id\": \"$APPT_A\",
-    \"patient_id\": \"$USER_ID\"
-  }" \
-  "$GRPC_STRIPE" payment.PaymentService/CreatePaymentRequest 2>&1 | jq . 2>/dev/null || \
-  echo "(gRPC INTERNAL error expected if Stripe key is test/invalid)"
+if command -v grpcurl >/dev/null 2>&1; then
+  grpcurl -plaintext \
+    -proto "$PROTO" \
+    -d "{
+      \"appointment_id\": \"$APPT_A\",
+      \"patient_id\": \"$USER_ID\"
+    }" \
+    "$GRPC_STRIPE" payment.PaymentService/CreatePaymentRequest 2>&1 | jq . 2>/dev/null || \
+    echo "(gRPC INTERNAL error expected if Stripe key is test/invalid)"
+else
+  echo "SKIP: grpcurl not installed; skipping CreatePaymentRequest check"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""

@@ -147,7 +147,7 @@ async function handleComplete() {
   completeLoading.value = true
   try {
     const f = consultForm.value
-    const result = await completeConsultation({
+    await completeConsultation({
       appointmentId: currentPatient.value.appointment_id,
       patientId: currentPatient.value.patient_id,
       doctorId: authStore.user?.id,
