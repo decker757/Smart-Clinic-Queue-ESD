@@ -21,6 +21,9 @@ class Settings:
     QUEUE_SERVICE_GRPC: str = os.getenv(
         "QUEUE_SERVICE_GRPC", "queue-coordinator-service:50052"
     )
+    STRIPE_SERVICE_GRPC: str = os.getenv(
+        "STRIPE_SERVICE_GRPC", "stripe-service:50051"
+    )
 
     # ── Auth ─────────────────────────────────────────────────
     JWKS_URL: str = os.getenv(

@@ -5,13 +5,11 @@ Implements the Scenario 3 flow from the architecture diagram:
   2. → gRPC POST MC + prescribed medication to patient-service
   3. → gRPC POST consultation notes to doctor-service
   4. → HTTP PATCH mark appointment as complete via appointment-service
-  5. → Publish "consultation.completed" event to RabbitMQ
+  5. → gRPC to Stripe Wrapper to create payment session
+       (Stripe Wrapper publishes payment.pending independently)
+  6. → Publish "consultation.completed" event to RabbitMQ
        (consumed by notification-service, queue-coordinator, activity-log)
        Queue removal happens async via RabbitMQ, NOT direct gRPC.
-
-Payment is created separately by staff via the billing workflow after
-the consultation is completed. Staff reviews the prescription and sets
-the final amount (base $20 + medication surcharges).
 """
 
 import grpc
@@ -110,21 +108,21 @@ async def complete_consultation(
             detail=f"Failed to mark appointment complete: {e}",
         )
 
-    # ── Step 5: Create standard payment request ───────────────
+    # ── Step 5: Create Stripe payment session via gRPC ─────────
+    #   The Stripe Wrapper publishes payment.pending independently (Step 15).
+    payment_link = None
     try:
         payment = await payment_svc.create_payment_request(
             appointment_id=body.appointment_id,
-            token=token,
+            patient_id=body.patient_id,
         )
-    except HTTPException:
-        raise
+        payment_link = payment.get("payment_link")
+    except grpc.RpcError as e:
+        # Non-critical — consultation is already completed;
+        # patient can pay later via a refreshed link.
+        logger.warning("Failed to create payment session: %s", e.details())
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create payment request: {e}",
-        )
-
-    payment_link = payment.get("payment_link")
+        logger.warning("Failed to create payment session: %s", e)
 
     # ── Step 6: Publish consultation.completed event ──────────
     event_published = await rabbitmq.publish_event(

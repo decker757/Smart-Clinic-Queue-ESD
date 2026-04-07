@@ -235,7 +235,7 @@ The seed script also inserts the doctor into the `doctors.doctors` and `appointm
    - Calls `patient-service` via gRPC → stores MC + prescription
    - Calls `doctor-service` via gRPC → stores consultation notes
    - Calls `appointment-service` → marks appointment `completed`
-   - Calls `payment-service` → creates a standard fixed SGD `$50` Stripe checkout link
+   - Calls `stripe-service` via gRPC → creates a Stripe checkout session (payment link)
 3. Publishes `consultation.completed` → `queue-coordinator` removes patient from queue
 4. Patient receives or sees the payment link and can pay immediately
 
