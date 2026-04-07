@@ -161,3 +161,10 @@ skills-lock.json
 
 CLAUDE.md
 .claw
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# Test/debug scripts (not for submission)
+test_scenarios.py
