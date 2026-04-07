@@ -1,8 +1,41 @@
 # Smart-Clinic-Queue-ESD
 
-A polyclinic queue management system built with an event-driven microservices architecture.
+Smart Clinic Queue is a polyclinic queue management platform built on an event-driven microservices architecture. The system supports appointment booking, queue check-in and reprioritization, consultation completion, payment link generation, and real-time queue visibility for patients, staff, and doctors.
 
-## Tech Stack
+This repository contains the complete project implementation for both local Docker deployment and the production-oriented AWS environment used for the final demonstration.
+
+## Contents
+
+- [Project Overview](#project-overview)
+- [Technology Stack](#technology-stack)
+- [Public Endpoints](#public-endpoints)
+- [Architecture Overview](#architecture-overview)
+- [System Components](#system-components)
+- [Authentication](#authentication)
+- [Core Business Scenarios](#core-business-scenarios)
+- [Requirements Coverage](#requirements-coverage)
+- [Data Model](#data-model)
+- [AWS Infrastructure Setup](#aws-infrastructure-setup)
+- [Deployed Resource Reference](#deployed-resource-reference)
+- [Service Operations](#service-operations)
+- [Local Development](#local-development-docker-compose)
+- [CI/CD](#cicd)
+- [Architecture Principles](#architecture-principles)
+- [Contributing](#contributing)
+
+## Project Overview
+
+Smart Clinic Queue addresses a common clinic operations challenge: coordinating appointments, patient arrivals, consultation progress, and billing across multiple roles without relying on a monolithic system.
+
+The solution is organized around:
+
+- atomic microservices for core business entities such as appointments, patients, doctors, queue entries, and payments
+- composite services that orchestrate cross-service workflows for patient, staff, doctor, and check-in journeys
+- asynchronous event propagation through RabbitMQ for queue updates, notifications, and audit trails
+- external service integrations for ETA calculation, payments, SMS notifications, and production authentication
+- a Vue-based web frontend for patients, staff, and doctors
+
+## Technology Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -18,7 +51,7 @@ A polyclinic queue management system built with an event-driven microservices ar
 | Frontend | Vue 3 + Vite + Tailwind CSS |
 | Infrastructure | AWS ECS Fargate (15 backend services) |
 
-## Public URLs
+## Public Endpoints
 
 | Endpoint | URL |
 |----------|-----|
@@ -26,7 +59,9 @@ A polyclinic queue management system built with an event-driven microservices ar
 | API Gateway | `https://y2noszdtvi.execute-api.ap-southeast-1.amazonaws.com` |
 | API Docs | Open `docs/index.html` locally via `npx serve docs/` |
 
-## Architecture
+## Architecture Overview
+
+The production deployment uses CloudFront, API Gateway, an Application Load Balancer, ECS Fargate services, Amazon MQ, RDS PostgreSQL, and ElastiCache Redis. Internally, services communicate through a mix of synchronous HTTP/gRPC calls and asynchronous RabbitMQ events.
 
 ```
 Browser / Mobile
@@ -54,7 +89,7 @@ Browser / Mobile
 
 > WebSocket connections use `wss://` to CloudFront. CloudFront forwards them as `ws://` to the ALB — this handles the mixed-content restriction when the frontend is served over HTTPS.
 
-### API Gateway Routes
+### API Gateway Routing
 
 Method-specific routes are used (not `ANY`) so OPTIONS preflight requests bypass the JWT authorizer and are handled by API Gateway's built-in CORS support.
 
@@ -108,7 +143,7 @@ RabbitMQ clinic.events (topic exchange)
   └── payment.failed            → payment-service
 ```
 
-## Services
+## System Components
 
 ### Atomic Services
 
@@ -146,7 +181,11 @@ RabbitMQ clinic.events (topic exchange)
 |---------|------|----------|
 | `frontend` | 5173 | Vue 3 + Vite + Tailwind CSS v4 |
 
-## Auth (Cognito)
+## Authentication
+
+Production authentication is handled by AWS Cognito with RS256 JWTs. Local Docker development uses BetterAuth to provide a self-contained setup without requiring AWS resources.
+
+### Production Auth (Cognito)
 
 All services validate RS256 JWTs issued by AWS Cognito.
 
@@ -156,7 +195,7 @@ All services validate RS256 JWTs issued by AWS Cognito.
 - **Role claim:** `custom:role` in the ID token (`patient` | `staff` | `doctor` | `admin`)
 - **Pre-SignUp trigger:** `cognito-auto-confirm` Lambda — users are auto-confirmed (no email verification required)
 
-### Sign in
+### Cognito Sign-In Example
 
 ```bash
 curl -X POST https://cognito-idp.ap-southeast-1.amazonaws.com/ \
@@ -170,7 +209,7 @@ curl -X POST https://cognito-idp.ap-southeast-1.amazonaws.com/ \
 # Use AuthenticationResult.IdToken as the Bearer token
 ```
 
-### Test accounts
+### Production Demo Accounts
 
 | Role | Username | Password |
 |------|----------|----------|
@@ -179,7 +218,7 @@ curl -X POST https://cognito-idp.ap-southeast-1.amazonaws.com/ \
 
 > Password policy: min 8 chars, uppercase + lowercase + number + symbol.
 
-### Create staff/doctor accounts (admin only)
+### Create Staff or Doctor Accounts (Admin)
 
 ```bash
 aws cognito-idp admin-create-user \
@@ -197,7 +236,7 @@ aws cognito-idp admin-set-user-password \
   --permanent
 ```
 
-### Local Docker demo accounts
+### Local Docker Demo Accounts
 
 When running locally with Docker Compose, seed test accounts by running:
 
@@ -213,7 +252,7 @@ sh infra/scripts/seed-users.sh
 
 The seed script also inserts the doctor into the `doctors.doctors` and `appointments.doctors` tables so booking and consultation flows work out of the box.
 
-## Scenarios
+## Core Business Scenarios
 
 ### Scenario 1 — Patient Books Appointment
 1. Patient signs in → receives Cognito ID token
@@ -256,10 +295,26 @@ wss://d2qwgyxb2qmggu.cloudfront.net/api/queue/ws/staff?token=<jwt>
 
 Both use `token` as a query parameter because browsers cannot set custom headers on WebSocket connections.
 
-## Database
+## Requirements Coverage
 
-Run `infra/migrations/schema.sql` against a fresh PostgreSQL database.
-For local Docker, the `app-db` container auto-loads this schema on a fresh volume.
+The current implementation satisfies the project's core technical requirements:
+
+| Requirement | Implementation |
+|-------------|----------------|
+| Minimum 3 interesting user scenarios | Booking, check-in with late handling, consultation completion with payment, plus real-time queue updates |
+| Minimum 3 atomic microservices for distinct entities | Appointment, Patient, Doctor, Queue, Payment, Activity Log, Auth |
+| At least 1 reused microservice | Appointment, Queue, Patient, Doctor, and Auth services are reused across multiple scenarios |
+| At least 1 OutSystems atomic service | `activity-log-service` integrates with an OutSystems REST endpoint |
+| At least 1 external service | Stripe, Twilio, Google Maps, and Cognito |
+| HTTP communication between services | Composite services call atomic services over HTTP |
+| Message-based communication | RabbitMQ `clinic.events` topic exchange |
+| Web-based GUI | Vue frontend for patient, staff, and doctor workflows |
+| JSON usage | REST APIs, frontend requests/responses, and event payloads |
+| Docker-based local deployment | Full local stack provided via Docker Compose |
+
+## Data Model
+
+Run `infra/migrations/schema.sql` against a fresh PostgreSQL database. For local Docker, the `app-db` container automatically loads this schema on a fresh volume.
 
 | Schema | Used by |
 |--------|---------|
@@ -272,11 +327,9 @@ For local Docker, the `app-db` container auto-loads this schema on a fresh volum
 
 > All services use explicit `schema.table` in SQL (e.g. `queue.queue_entries`) — required because RDS Proxy / PgBouncer transaction mode strips `search_path`.
 
----
-
 ## AWS Infrastructure Setup
 
-This section documents how to recreate the AWS infrastructure from scratch.
+This section documents how to recreate the AWS deployment from scratch.
 
 ### Setup Order
 
@@ -381,7 +434,7 @@ sh infra/scripts/push-to-ecr.sh
 
 The frontend is deployed separately to S3 + CloudFront in Step 10.
 
-> **Critical:** Always use `--platform linux/amd64`. If you build on Apple Silicon (arm64) without this flag, the container will silently crash on Fargate with no error logs.
+> **Critical:** Always use `--platform linux/amd64`. If you build on Apple Silicon (`arm64`) without this flag, the container may silently fail on Fargate without producing useful logs.
 
 ### 7. ECS Cluster + Cloud Map
 
@@ -556,7 +609,7 @@ aws logs tail /ecs/smart-clinic --log-stream-name-prefix <service-name> --follow
 
 ### Horizontal scaling
 
-The system is designed for horizontal scaling: composite orchestrators are stateless, Redis handles shared queue state, and the ALB distributes traffic across all healthy tasks.
+The system is designed for horizontal scaling: composite orchestrators are stateless, Redis manages shared queue state, and the ALB distributes traffic across healthy tasks.
 
 **Local (Docker Compose):** The four main composite services (`composite-appointment`, `composite-patient-orchestrator`, `composite-staff-orchestrator`, `composite-consultation`) run with `deploy.replicas: 2` by default. Kong's internal DNS round-robins across replicas automatically. To adjust:
 
@@ -570,7 +623,7 @@ docker compose -f infra/docker-compose.yml up -d --scale composite-appointment=3
 sh infra/scripts/enable-auto-scaling.sh
 ```
 
-This configures each composite service to scale between 1–4 tasks, targeting 70% average CPU utilisation. The ALB automatically registers new tasks and distributes traffic. Scaling parameters are configurable in `.env.aws` (`AUTOSCALING_MIN_TASKS`, `AUTOSCALING_MAX_TASKS`, `AUTOSCALING_CPU_TARGET`).
+This configures each composite service to scale between 1 and 4 tasks, targeting 70% average CPU utilization. The ALB automatically registers new tasks and distributes traffic. Scaling parameters are configurable in `.env.aws` (`AUTOSCALING_MIN_TASKS`, `AUTOSCALING_MAX_TASKS`, `AUTOSCALING_CPU_TARGET`).
 
 ### Scale to zero (save costs)
 
@@ -596,7 +649,7 @@ done
 
 ## Local Development (Docker Compose)
 
-Local development uses Docker Compose to run all 16 services plus infrastructure (PostgreSQL, RabbitMQ, Redis, Kong). Authentication is handled by BetterAuth (not Cognito), so no AWS account is needed.
+Local development uses Docker Compose to run all 16 services together with supporting infrastructure (PostgreSQL, RabbitMQ, Redis, and Kong). Authentication is handled by BetterAuth rather than Cognito, so no AWS account is required.
 
 ### Prerequisites
 
@@ -614,7 +667,7 @@ cd Smart-Clinic-Queue-ESD
 
 ### 2. Create environment files
 
-Copy every `.env.example` to its corresponding `.env` file, then update the values that need local Docker settings:
+Copy each `.env.example` file to its corresponding `.env` file, then update the values that require local Docker settings:
 
 ```bash
 # Copy all env files at once
@@ -649,7 +702,7 @@ GOOGLE_MAPS_API_KEY=your-key-here   # optional
 JWT_SECRET=local-dev-secret
 ```
 
-**`infra/env/notification.env`** — Already defaults to `SMS_ENABLED=false`, so Twilio credentials are not needed for local. Notifications are logged to console instead.
+**`infra/env/notification.env`** — This already defaults to `SMS_ENABLED=false`, so Twilio credentials are not needed for local development. Notifications are logged to the console instead.
 
 **`infra/env/stripe-service.env`** — Stripe credentials are optional. Without them, consultations still complete, but automatic payment links cannot be generated and patients will not see a payable link in appointment history:
 ```
@@ -657,7 +710,7 @@ STRIPE_API_KEY=sk_test_...           # optional
 STRIPE_WEBHOOK_SIGNING_SECRET=whsec_... # optional (get from `stripe listen`)
 ```
 
-**`infra/env/patient.env`** — The `AWS_*` and `S3_BUCKET` variables are for file uploads to S3. Without them, file uploads in medical records will fail, but all other patient features work:
+**`infra/env/patient.env`** — The `AWS_*` and `S3_BUCKET` variables are used for file uploads to S3. Without them, file uploads in medical records will fail, but all other patient features will continue to work:
 ```
 AWS_REGION=ap-southeast-1            # optional
 AWS_ACCESS_KEY_ID=...                # optional
@@ -669,7 +722,7 @@ S3_BUCKET=...                        # optional
 
 ### 3. Start the stack (recommended — automated)
 
-The bringup script starts services in the correct order, extracts the BetterAuth JWKS public key for Kong, and runs integration tests:
+The bring-up script starts services in the correct order, extracts the BetterAuth JWKS public key for Kong, and runs integration tests:
 
 ```bash
 sh infra/scripts/bringup-and-verify-local.sh
@@ -705,7 +758,7 @@ This creates three accounts and inserts the doctor into the relevant database ta
 | Kong API Gateway | http://localhost:8000 |
 | RabbitMQ Management | http://localhost:15673 (guest / guest) |
 
-Open http://localhost:5173 and log in with one of the seeded accounts above. Patients see the patient dashboard, staff see the staff dashboard, and doctors see the doctor dashboard.
+Open http://localhost:5173 and sign in with one of the seeded accounts above. Patients see the patient dashboard, staff see the staff dashboard, and doctors see the doctor dashboard.
 
 ### 6. Forward Stripe webhooks (optional — for payment testing)
 
@@ -718,7 +771,7 @@ stripe listen --forward-to localhost:8086/api/payments/webhook
 
 ### Alternative: Manual start
 
-If you prefer to start services manually instead of using the bringup script:
+If you prefer to start services manually instead of using the bring-up script:
 
 ```bash
 cd infra
@@ -744,7 +797,7 @@ sh scripts/seed-users.sh
 
 | Problem | Fix |
 |---------|-----|
-| Services crash with "connection refused" | Database or RabbitMQ not ready. Use the bringup script or wait for health checks. |
+| Services crash with "connection refused" | Database or RabbitMQ may not be ready yet. Use the bring-up script or wait for health checks. |
 | Kong returns 401 on all requests | `kong.env` is missing or has wrong RSA key. Re-run `extract-jwks-pem.sh`. |
 | Login returns 500 | Check `docker compose logs auth-service`. Usually a missing `BETTER_AUTH_SECRET`. |
 | Check-in always returns "on time" | Google Maps API key not set. ETA service uses 15-min default fallback. |
