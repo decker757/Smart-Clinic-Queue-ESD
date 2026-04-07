@@ -15,7 +15,7 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 echo "[2/9] Starting base services..."
-docker compose up -d rabbitmq app-db
+docker compose up -d --build rabbitmq app-db
 
 echo "[3/9] Waiting for app-db and applying schema..."
 for _ in $(seq 1 60); do
@@ -35,7 +35,7 @@ docker compose exec -T app-db \
   -f /docker-entrypoint-initdb.d/00-schema.sql >/dev/null
 
 echo "[4/9] Starting auth-service..."
-docker compose up -d auth-service
+docker compose up -d --build auth-service
 
 echo "[5/9] Waiting for auth-service JWKS endpoint..."
 for _ in $(seq 1 60); do
@@ -66,7 +66,7 @@ fi
 } > "$KONG_ENV"
 
 echo "[7/9] Starting full stack and reloading Kong..."
-docker compose up -d
+docker compose up -d --build
 
 echo "[8/9] Seeding local demo users..."
 cd "$ROOT_DIR"

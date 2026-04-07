@@ -121,6 +121,14 @@ echo ""
 echo "--- Waiting for Kong patient route readiness (max 60s) ---"
 wait_for_code "$BASE_KONG/api/patients/openapi.json" "$DOCTOR_JWT" "200" "Kong/patient route ready"
 
+echo ""
+echo "--- Waiting for Kong queue route readiness (max 60s) ---"
+wait_for_code "$BASE_KONG/api/queue/openapi.json" "$DOCTOR_JWT" "200" "Kong/queue route ready"
+
+echo ""
+echo "--- Waiting for Kong composite appointment route readiness (max 60s) ---"
+wait_for_code "$BASE_KONG/api/composite/appointments/openapi.json" "$DOCTOR_JWT" "200" "Kong/composite appointment route ready"
+
 # ── 2. Doctor endpoints ───────────────────────────────────────────────────────
 
 echo ""
@@ -217,7 +225,8 @@ check_code "$CODE" "403" "Patient JWT rejected on staff route (insufficient role
 
 echo ""
 echo "=== 11b. Reset queue state for deterministic test ==="
-CODE=$(req_code -X POST "http://localhost:3002/api/queue/reset")
+CODE=$(req_code -X POST "$BASE_KONG/api/queue/reset" \
+  -H "Authorization: Bearer $DOCTOR_JWT")
 check_code "$CODE" "200" "Queue reset"
 
 echo ""

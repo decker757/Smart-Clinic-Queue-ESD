@@ -4,7 +4,7 @@
 #
 # Requires (all via docker compose):
 #   auth-service         → localhost:3000
-#   composite-appointment → localhost:8080  (books the appointment)
+#   composite-appointment → via Kong (localhost:8000)
 #   queue-coordinator    → localhost:3002   (verifies queue state)
 #   checkin-orchestrator → localhost:8085   (under test)
 #   rabbitmq             → internal         (event bus)
@@ -21,7 +21,7 @@
 set -e
 
 KONG="http://localhost:8000"
-BASE_AUTH="$KONG/api/auth"
+BASE_AUTH="http://localhost:3000/api/auth"
 BASE_COMPOSITE="$KONG"
 BASE_CHECKIN="$KONG/api"
 BASE_QUEUE="$KONG"
@@ -32,6 +32,28 @@ CLINIC_LAT="1.3000"
 CLINIC_LNG="103.8000"
 PATIENT_LAT_ONTIME="1.2900"   # ~1 km from clinic  → on time
 PATIENT_LAT_LATE="1.0000"     # ~33 km from clinic → late
+
+wait_for_code() {
+  URL=$1
+  JWT=$2
+  EXPECTED=$3
+  LABEL=$4
+  CODE="000"
+
+  for _ in $(seq 1 30); do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" \
+      -H "Authorization: Bearer $JWT")
+    if [ "$CODE" = "$EXPECTED" ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$CODE" != "$EXPECTED" ]; then
+    echo "FAIL: $LABEL (last HTTP $CODE)"
+    exit 1
+  fi
+}
 
 echo ""
 echo "=== 1. Sign up ==="
@@ -53,6 +75,12 @@ echo "=== 3. Get JWT ==="
 JWT=$(curl -sf "$BASE_AUTH/token" \
   -H "Authorization: Bearer $SESSION_TOKEN" | jq -r '.token')
 echo "JWT acquired."
+
+echo ""
+echo "--- Waiting for Kong routes ---"
+wait_for_code "$BASE_COMPOSITE/api/composite/appointments/openapi.json" "$JWT" "200" "Composite appointment route ready"
+wait_for_code "$BASE_QUEUE/api/queue/openapi.json" "$JWT" "200" "Queue route ready"
+wait_for_code "$BASE_CHECKIN/check-in/openapi.json" "$JWT" "200" "Check-in route ready"
 
 echo ""
 echo "=== 4. Book a morning appointment (creates queue entry) ==="

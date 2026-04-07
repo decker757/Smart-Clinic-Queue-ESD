@@ -5,11 +5,34 @@
 set -e
 
 BASE_AUTH="http://localhost:3000"
-BASE_COMPOSITE="http://localhost:8080/api/composite/appointments"
+BASE_KONG="http://localhost:8000"
+BASE_COMPOSITE="$BASE_KONG/api/composite/appointments"
 EMAIL="test-$(date +%s)@test.com"
 PASSWORD="password123"
 DOCTOR_ID="${TEST_DOCTOR_ID:-}"
 START_TIME="$(date -u -v+2d '+%Y-%m-%dT09:00:00Z' 2>/dev/null || date -u -d '+2 days' '+%Y-%m-%dT09:00:00Z')"
+
+wait_for_code() {
+  URL=$1
+  JWT=$2
+  EXPECTED=$3
+  LABEL=$4
+  CODE="000"
+
+  for _ in $(seq 1 30); do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" \
+      -H "Authorization: Bearer $JWT")
+    if [ "$CODE" = "$EXPECTED" ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$CODE" != "$EXPECTED" ]; then
+    echo "FAIL: $LABEL (last HTTP $CODE)"
+    exit 1
+  fi
+}
 
 echo ""
 echo "=== 1. Sign up ==="
@@ -31,6 +54,10 @@ echo "=== 3. Get JWT ==="
 JWT=$(curl -sf "$BASE_AUTH/api/auth/token" \
   -H "Authorization: Bearer $SESSION_TOKEN" | jq -r '.token')
 echo "JWT acquired."
+
+echo ""
+echo "--- Waiting for Kong composite-appointment route readiness ---"
+wait_for_code "$BASE_COMPOSITE/openapi.json" "$JWT" "200" "Kong composite-appointment route ready"
 
 echo ""
 echo "=== 4. Book generic morning slot (with idempotency key) ==="
