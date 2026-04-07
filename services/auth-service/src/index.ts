@@ -19,6 +19,7 @@ app.use((req, res, next) => {
 });
 
 // Swagger UI — must be mounted before the BetterAuth catch-all handler
+app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
 app.get("/api/auth/openapi.json", (_req, res) => res.json(swaggerSpec));
 app.use("/api/auth/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

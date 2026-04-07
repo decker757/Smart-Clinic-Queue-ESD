@@ -403,6 +403,7 @@ register composite-staff-orchestrator <<EOF
     "environment": [
       {"name": "JWKS_URL", "value": "$COGNITO_JWKS_URL"},
       {"name": "APPOINTMENT_SERVICE_URL", "value": "http://appointment-service.$NS:3001"},
+      {"name": "QUEUE_SERVICE_URL", "value": "http://queue-coordinator-service.$NS:3002"},
       {"name": "PAYMENT_SERVICE_URL", "value": "http://payment-service.$NS:3008"},
       {"name": "PATIENT_SERVICE_URL", "value": "http://patient-service.$NS:3007"},
       {"name": "DOCTOR_SERVICE_GRPC", "value": "doctor-service.$NS:50055"},
