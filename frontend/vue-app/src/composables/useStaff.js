@@ -105,52 +105,6 @@ export function useStaff() {
     return res.json()
   }
 
-  // ─── Billing ───────────────────────────────────────────────────────────────
-
-  async function fetchPendingBilling() {
-    const res = await fetch(
-      `${API_BASE}/api/composite/staff/billing/pending`,
-      { headers: authHeaders(authStore.jwt) },
-    )
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      throw new Error(apiError(body, 'Failed to load pending billing'))
-    }
-    return res.json()
-  }
-
-  async function fetchPrescription(appointmentId) {
-    const res = await fetch(
-      `${API_BASE}/api/composite/staff/billing/${appointmentId}/prescription`,
-      { headers: authHeaders(authStore.jwt) },
-    )
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      throw new Error(apiError(body, 'Failed to load billing details'))
-    }
-    return res.json()
-  }
-
-  async function createBilling({ appointmentId, amountCents, currency }) {
-    const res = await fetch(
-      `${API_BASE}/api/composite/staff/billing/create`,
-      {
-        method: 'POST',
-        headers: { ...authHeaders(authStore.jwt), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          appointment_id: appointmentId,
-          amount_cents: amountCents,
-          currency: currency ?? 'sgd',
-        }),
-      },
-    )
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      throw new Error(apiError(body, 'Failed to create billing'))
-    }
-    return res.json()
-  }
-
   return {
     fetchQueuePosition,
     checkInPatient,
@@ -160,8 +114,5 @@ export function useStaff() {
     fetchPatient,
     fetchQueue,
     fetchDoctors,
-    fetchPendingBilling,
-    fetchPrescription,
-    createBilling,
   }
 }

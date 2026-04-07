@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { apiError } from '@/utils/api'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -79,6 +80,36 @@ function resolveFileUrl(url) {
   if (!url) return url
   if (url.startsWith('http://') || url.startsWith('https://')) return url
   return `${API_BASE}${url}`
+}
+
+async function openFile(memo) {
+  if (!memo?.file_url) return
+
+  const url = resolveFileUrl(memo.file_url)
+  if (/^https?:\/\//.test(memo.file_url)) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+
+  submitError.value = ''
+  try {
+    const res = await fetch(url, { headers: authHeaders() })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(apiError(body, 'Could not open file'))
+    }
+
+    const blob = await res.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer')
+    if (!opened) {
+      URL.revokeObjectURL(objectUrl)
+      throw new Error('Browser blocked the file preview')
+    }
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  } catch (e) {
+    submitError.value = e.message ?? 'Could not open file'
+  }
 }
 
 function recordLabel(type) {
@@ -444,18 +475,17 @@ function cancelForms() {
           <!-- Expanded detail -->
           <div v-if="expandedId === memo.id" class="border-t border-slate-100 px-4 py-4 space-y-3">
             <p v-if="memo.content" class="text-sm text-text whitespace-pre-wrap">{{ memo.content }}</p>
-            <a
+            <button
               v-if="memo.file_url"
-              :href="resolveFileUrl(memo.file_url)"
-              target="_blank"
-              rel="noopener noreferrer"
+              type="button"
               class="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
+              @click="openFile(memo)"
             >
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
               </svg>
               Open File
-            </a>
+            </button>
           </div>
         </li>
       </ul>
