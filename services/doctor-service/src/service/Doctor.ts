@@ -34,7 +34,7 @@ export async function getDoctorSlots(doctor_id: string, date?: string): Promise<
     if (date) {
         const { rows } = await pool.query(
             `SELECT * FROM doctors.time_slots
-             WHERE doctor_id = $1 AND start_time::date = $2::date AND start_time > $3
+             WHERE doctor_id = $1 AND (start_time AT TIME ZONE 'Asia/Singapore')::date = $2::date AND start_time > $3
              ORDER BY start_time`,
             [doctor_id, date, nowUTC]
         );
