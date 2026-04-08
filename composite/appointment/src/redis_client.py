@@ -125,10 +125,15 @@ async def reserve_idempotency(user_id: str, key: str) -> bool:
     global _redis
     r = await get_redis()
     if r is None:
-        # Redis is temporarily unavailable — allow the request through without
-        # deduplication rather than blocking all bookings during an outage.
-        logger.warning("[Redis] idempotency store unavailable — proceeding without deduplication (key=%s)", key)
-        return True
+        if not _is_aws_tls_redis():
+            # Local Redis unavailable — degrade gracefully (mirrors get_idempotency behaviour).
+            logger.warning("[Redis] idempotency store unavailable — proceeding without reservation (key=%s)", key)
+            return True
+        # AWS ElastiCache unavailable — fail closed to prevent duplicate bookings.
+        raise HTTPException(
+            status_code=503,
+            detail="Idempotency store unavailable — please retry shortly",
+        )
     try:
         result = await r.set(_scoped_key(user_id, key), "pending", nx=True, ex=60)
         return result is not None

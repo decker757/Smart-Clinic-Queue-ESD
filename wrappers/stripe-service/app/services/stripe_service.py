@@ -9,6 +9,8 @@ def create_checkout_session(amount: int, currency: str, consultation_id: str, pa
         "consultation_id": consultation_id,
         "patient_id": patient_id,
     }
+    # Pass consultation_id as the Stripe idempotency key so that retries
+    # return the same session rather than creating a second checkout session.
     return stripe.checkout.Session.create(
         payment_method_types=["card"],
         line_items=[{
@@ -24,4 +26,5 @@ def create_checkout_session(amount: int, currency: str, consultation_id: str, pa
         cancel_url=settings.STRIPE_CANCEL_URL or f"{settings.FRONTEND_BASE_URL}/cancel",
         metadata=metadata,
         payment_intent_data={"metadata": metadata},
+        idempotency_key=consultation_id,
     )

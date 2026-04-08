@@ -69,6 +69,8 @@ export async function claimConsultation(
         // Previous attempt failed — atomically reset to 'processing' so this
         // retry can proceed. Use a conditional UPDATE (WHERE completion_status = 'failed')
         // so only one concurrent retry wins; the rest will observe 'processing' below.
+        // Return the stored payment_link (if any) so the caller can skip Stripe
+        // when the link was already created before the failure occurred.
         const { rowCount } = await pool.query(
             `UPDATE doctors.consultations SET completion_status = 'processing'
              WHERE appointment_id = $1 AND completion_status = 'failed'`,

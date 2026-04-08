@@ -156,8 +156,8 @@ async def complete_consultation(
         )
 
     # ── Step 5: Create Stripe payment session via gRPC ───────────────
-    # Fail hard — if no payment row is created, the refresh endpoint has nothing
-    # to recover later, making the consultation unbillable.
+    # Stripe idempotency key = appointment_id ensures retries return the same
+    # session rather than creating a duplicate, so this is always safe to call.
     payment_link = None
     try:
         payment = await payment_svc.create_payment_request(

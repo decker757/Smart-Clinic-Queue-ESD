@@ -13,6 +13,25 @@ export async function initPublisher(): Promise<void> {
     const connection = await amqp.connect(url);
     channel = await connection.createChannel();
 
+    // Null out the channel on close or error so publish functions return false
+    // rather than silently dropping messages after a broker restart.
+    channel.on("close", () => {
+        console.warn("[Publisher] Channel closed — publisher unavailable until restart");
+        channel = null;
+    });
+    channel.on("error", (err: Error) => {
+        console.error("[Publisher] Channel error:", err.message, "— publisher unavailable until restart");
+        channel = null;
+    });
+    connection.on("close", () => {
+        console.warn("[Publisher] Connection closed — publisher unavailable until restart");
+        channel = null;
+    });
+    connection.on("error", (err: Error) => {
+        console.error("[Publisher] Connection error:", err.message, "— publisher unavailable until restart");
+        channel = null;
+    });
+
     await channel.assertExchange(EXCHANGE, "topic", { durable: true });
     await channel.assertQueue(APPROACHING_TTL_QUEUE, {
         durable: true,
