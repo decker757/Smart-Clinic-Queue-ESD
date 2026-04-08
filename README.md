@@ -173,7 +173,7 @@ RabbitMQ clinic.events (topic exchange)
 | `composite-patient-orchestrator` | 8001 | Python + FastAPI | Patient profile, history, memos |
 | `composite-consultation` | 8002 | Python + FastAPI | Doctor completes consultation, triggers payment |
 | `composite-staff-orchestrator` | 8004 | Python + FastAPI | Staff views queue, calls next patient |
-| `checkin-orchestrator` | 8000 | Python + FastAPI | Patient check-in, late detection via ETA |
+| `checkin-orchestrator` | 8085 | Python + FastAPI | Patient check-in, late detection via ETA |
 
 ### Frontend
 
@@ -809,7 +809,7 @@ sh scripts/seed-users.sh
 ## CI/CD
 
 - **PR checks** (`.github/workflows/pr-check.yml`): lint + unit tests + GitGuardian secret scan on every PR
-- **Per-service deploys** (`.github/workflows/deploy-*.yml`): legacy Railway workflows — AWS deploys are manual via the scripts above
+- **Deploys are manual** via the scripts in `infra/scripts/` — see the [Service Operations](#service-operations) section above
 
 ---
 
