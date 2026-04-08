@@ -136,11 +136,6 @@ router.post("/deprioritize/:appointment_id", async (req: Request, res: Response)
         const travel_eta_minutes = Number(req.body?.travel_eta_minutes ?? 0);
         const entry = await QueueService.deprioritize(appointment_id, travel_eta_minutes);
         broadcastQueueUpdate(appointment_id, entry);
-        publishEvent("queue.deprioritized", {
-            appointment_id: entry.appointment_id,
-            patient_id: entry.patient_id,
-            travel_eta_minutes,
-        });
         res.json(entry);
         broadcastAllPatientPositions().catch(() => {});
     } catch (e: any) {
