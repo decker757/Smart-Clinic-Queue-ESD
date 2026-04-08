@@ -120,25 +120,20 @@ async def reserve_idempotency(key: str) -> bool:
     global _redis
     r = await get_redis()
     if r is None:
-        if not _is_aws_tls_redis():
-            raise HTTPException(
-                status_code=503,
-                detail="Idempotency store unavailable — please retry shortly",
-            )
-        logger.warning("[Redis] skipping idempotency reservation (Redis unavailable)")
-        return True  # degrade gracefully on AWS
+        raise HTTPException(
+            status_code=503,
+            detail="Idempotency store unavailable — please retry shortly",
+        )
     try:
         result = await r.set(f"idempotency:appt:{key}", "pending", nx=True, ex=60)
         return result is not None
     except Exception as e:
         logger.error("[Redis] idempotency reserve failed (key=%s): %s", key, e)
         _redis = None
-        if not _is_aws_tls_redis():
-            raise HTTPException(
-                status_code=503,
-                detail="Idempotency store unavailable — please retry shortly",
-            )
-        return True  # degrade gracefully on AWS
+        raise HTTPException(
+            status_code=503,
+            detail="Idempotency store unavailable — please retry shortly",
+        )
 
 
 async def clear_idempotency_reservation(key: str) -> None:

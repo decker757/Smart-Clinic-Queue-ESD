@@ -1,6 +1,6 @@
 -- Full schema for Smart Clinic Queue system.
 -- Run once against a fresh Supabase database.
--- Consolidates migrations 001–012.
+-- Consolidates migrations 001–014.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -17,9 +17,6 @@ CREATE TABLE IF NOT EXISTS betterauth."user" (
     "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     "updatedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-ALTER TABLE betterauth."user"
-    ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'patient';
 
 CREATE TABLE IF NOT EXISTS betterauth.session (
     id           TEXT        PRIMARY KEY,
@@ -279,10 +276,6 @@ CREATE TABLE IF NOT EXISTS payments.payments (
     payment_link      TEXT,
     created_at        TIMESTAMPTZ DEFAULT NOW()
 );
-
-ALTER TABLE payments.payments
-    ADD COLUMN IF NOT EXISTS amount_cents INT,
-    ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'sgd';
 
 CREATE INDEX IF NOT EXISTS idx_payments_consultation ON payments.payments(consultation_id);
 CREATE INDEX IF NOT EXISTS idx_payments_patient      ON payments.payments(patient_id);

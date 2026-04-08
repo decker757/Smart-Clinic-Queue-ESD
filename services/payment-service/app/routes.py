@@ -134,7 +134,7 @@ async def refresh_payment_link(consultation_id: str, auth: AuthContext = Depends
     async with pool.acquire() as conn:
         await conn.execute(
             """UPDATE payments.payments
-               SET payment_link = $1, payment_intent_id = $2
+               SET payment_link = $1, payment_intent_id = $2, status = 'pending'
                WHERE id = $3""",
             new_link, new_session_id, row["id"],
         )

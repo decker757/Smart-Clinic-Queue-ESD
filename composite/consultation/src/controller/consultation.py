@@ -109,7 +109,9 @@ async def complete_consultation(
         )
 
     # ── Step 5: Create Stripe payment session via gRPC ─────────
-    #   The Stripe Wrapper publishes payment.pending independently (Step 15).
+    #   The Stripe Wrapper publishes payment.pending independently.
+    #   Fail hard here — if no payment row is created, the refresh endpoint
+    #   has nothing to recover later, making the consultation unbillable.
     payment_link = None
     try:
         payment = await payment_svc.create_payment_request(
@@ -118,13 +120,20 @@ async def complete_consultation(
         )
         payment_link = payment.get("payment_link")
     except grpc.RpcError as e:
-        # Non-critical — consultation is already completed;
-        # patient can pay later via a refreshed link.
-        logger.warning("Failed to create payment session: %s", e.details())
+        raise HTTPException(
+            status_code=503,
+            detail=f"Payment session could not be created — please retry: {e.details()}",
+        )
     except Exception as e:
-        logger.warning("Failed to create payment session: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Payment session could not be created — please retry: {e}",
+        )
 
     # ── Step 6: Publish consultation.completed event ──────────
+    #   Queue removal, notifications, and audit all depend on this event.
+    #   Fail hard so the doctor retries rather than leaving the patient stuck
+    #   in the active queue with no downstream updates.
     event_published = await rabbitmq.publish_event(
         "consultation.completed",
         {
@@ -137,16 +146,17 @@ async def complete_consultation(
             "payment_link": payment_link,
         },
     )
-
-    message = "Consultation completed successfully"
     if not event_published:
-        message += " (warning: queue/notification update may be delayed — event bus temporarily unavailable)"
+        raise HTTPException(
+            status_code=503,
+            detail="Queue update could not be dispatched — please retry to ensure the patient is removed from the queue.",
+        )
 
     return ConsultationResponse(
         appointment_id=body.appointment_id,
         patient_id=body.patient_id,
         doctor_id=body.doctor_id,
         status="completed",
-        message=message,
+        message="Consultation completed successfully",
         payment_link=payment_link,
     )

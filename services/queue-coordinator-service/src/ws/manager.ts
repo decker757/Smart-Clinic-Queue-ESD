@@ -272,14 +272,17 @@ export async function broadcastAllPatientPositions(): Promise<void> {
             row.approaching_notified_at === null &&
             Number(row.active_ahead) <= NOTIFY_THRESHOLD
         ) {
-            markApproachingNotified(row.appointment_id).then(() => {
-                const payload = {
-                    patient_id: row.patient_id,
-                    appointment_id: row.appointment_id,
-                };
-                publishApproaching(payload);
-                publishApproachingWithTtl(payload);
-            }).catch((e) => console.error("[Approaching] Failed to notify:", e));
+            // Publish first, then mark as notified — so a silent no-op from the
+            // publisher during a broker outage does not permanently suppress the reminder.
+            const payload = {
+                patient_id: row.patient_id,
+                appointment_id: row.appointment_id,
+            };
+            publishApproaching(payload);
+            publishApproachingWithTtl(payload);
+            markApproachingNotified(row.appointment_id).catch(
+                (e) => console.error("[Approaching] Failed to mark notified:", e)
+            );
         }
     }
 }
