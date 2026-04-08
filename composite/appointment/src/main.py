@@ -152,7 +152,6 @@ async def create_appointment(
         session=appt.session,
     ).model_dump(mode="json")
 
-    publish_failed = False
     if body.slot_id:
         # Claim the slot first — only publish the event once we know the slot is ours.
         # Running both concurrently (asyncio.gather) risks publishing appointment.booked
@@ -174,14 +173,26 @@ async def create_appointment(
         await publish_event("appointment.booked", event_payload)
     except HTTPException as e:
         if e.status_code == 503:
-            publish_failed = True
-            logger.error("Event publish failed for appointment %s — queue entry will be missing", appt.id)
-        else:
-            raise
+            # Event bus is down — roll back so the patient doesn't end up with
+            # a persisted appointment but no queue entry or downstream notifications.
+            logger.error("Event publish failed for appointment %s — rolling back", appt.id)
+            try:
+                await appointment_service.cancel_appointment(appt.id, auth_ctx.token)
+                if body.slot_id:
+                    await appointment_service.release_slot(
+                        appt.doctor_id,
+                        appt.start_time.isoformat() if appt.start_time else "",
+                        auth_ctx.token,
+                    )
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=503,
+                detail="Booking service is temporarily unavailable — please try again in a moment.",
+            )
+        raise
 
     response = appt.model_dump(mode="json")
-    if publish_failed:
-        response["warning"] = "Appointment created but queue notification failed — please contact the clinic if your queue number does not appear."
 
     if x_idempotency_key:
         await set_idempotency(x_idempotency_key, response)
@@ -212,18 +223,23 @@ async def cancel_appointment(
 
     appt = await appointment_service.cancel_appointment(appointment_id, auth_ctx.token)
 
-    # Release the doctor's time slot if this was a specific-doctor booking
+    # Release the doctor's time slot if this was a specific-doctor booking.
+    # Retry a few times — if all attempts fail the slot stays marked booked
+    # until manually corrected, but the cancellation itself is not rolled back.
     if existing.doctor_id and existing.start_time:
-        try:
-            await appointment_service.release_slot(
-                existing.doctor_id,
-                existing.start_time.isoformat() if hasattr(existing.start_time, "isoformat") else str(existing.start_time),
-                auth_ctx.token,
-            )
-        except Exception as e:
-            # Non-critical: log but don't block the cancellation
-            import logging
-            logging.warning(f"Could not release slot for cancelled appointment {appointment_id}: {e}")
+        start_str = existing.start_time.isoformat() if hasattr(existing.start_time, "isoformat") else str(existing.start_time)
+        for attempt in range(3):
+            try:
+                await appointment_service.release_slot(existing.doctor_id, start_str, auth_ctx.token)
+                break
+            except Exception as e:
+                if attempt == 2:
+                    logger.error(
+                        "Could not release slot for cancelled appointment %s after 3 attempts: %s — slot may need manual correction",
+                        appointment_id, e,
+                    )
+                else:
+                    await asyncio.sleep(0.5 * (2 ** attempt))
 
     try:
         await publish_event("appointment.cancelled", {

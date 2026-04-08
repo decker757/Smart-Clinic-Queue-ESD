@@ -4,7 +4,7 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
-from app.auth import AuthContext, require_auth, require_staff
+from app.auth import AuthContext, require_auth
 from app.db import get_pool
 from app.config import settings
 from app.publisher import publish_event
@@ -21,12 +21,6 @@ class PaymentRecord(BaseModel):
     payment_link: Optional[str] = None
     created_at: datetime
 
-
-class CreateBillingRequest(BaseModel):
-    """Staff sets the final billing amount for a completed consultation."""
-    consultation_id: str
-    amount_cents: int       # total charge in smallest currency unit (e.g. 2000 = $20.00)
-    currency: str = "sgd"
 
 
 class RefreshLinkResponse(BaseModel):
@@ -173,112 +167,3 @@ async def get_patient_payment_history(patient_id: str, auth: AuthContext = Depen
         raise HTTPException(status_code=404, detail="No payment records found")
     return [_serialize_payment_record(r) for r in rows]
 
-
-@router.post(
-    "/billing",
-    response_model=PaymentRecord,
-    summary="Staff creates a billing entry and generates a Stripe payment link",
-    responses={
-        400: {"description": "Payment already exists for this consultation"},
-        403: {"description": "Staff access required"},
-        502: {"description": "Stripe service unavailable"},
-    },
-)
-async def create_billing(body: CreateBillingRequest, auth: AuthContext = Depends(require_staff)):
-    """Called by staff-orchestrator after staff sets the final amount."""
-    if body.amount_cents <= 0:
-        raise HTTPException(status_code=400, detail="amount_cents must be greater than 0")
-
-    currency = _normalize_currency(body.currency)
-    pool = await get_pool()
-
-    try:
-        async with httpx.AsyncClient() as client:
-            appt_res = await client.get(
-                f"{settings.APPOINTMENT_SERVICE_URL}/appointments/{body.consultation_id}",
-                headers={"Authorization": f"Bearer {auth.token}"},
-                timeout=10,
-            )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail="Appointment service unavailable") from exc
-
-    if appt_res.status_code == 404:
-        raise HTTPException(status_code=404, detail="Consultation not found")
-    if not appt_res.is_success:
-        raise HTTPException(status_code=502, detail="Appointment service unavailable")
-
-    appointment = appt_res.json()
-    if appointment.get("status") != "completed":
-        raise HTTPException(status_code=400, detail="Billing can only be created for completed consultations")
-
-    patient_id = appointment.get("patient_id")
-    if not patient_id:
-        raise HTTPException(status_code=400, detail="Consultation is missing a patient_id")
-
-    # Serialize concurrent submissions for the same consultation using a
-    # PostgreSQL advisory lock. The lock is held for the duration of the
-    # transaction (check → Stripe call → insert) so two concurrent staff
-    # clicks cannot both pass the duplicate check and generate two payment links.
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                "SELECT pg_advisory_xact_lock(hashtext($1))",
-                body.consultation_id,
-            )
-            existing = await conn.fetchrow(
-                "SELECT id FROM payments.payments WHERE consultation_id = $1 LIMIT 1",
-                body.consultation_id,
-            )
-            if existing:
-                raise HTTPException(status_code=400, detail="Billing already created for this consultation")
-
-            # Create Stripe checkout session (inside the advisory lock so only
-            # one request reaches Stripe per consultation).
-            try:
-                async with httpx.AsyncClient() as client:
-                    res = await client.post(
-                        f"{settings.STRIPE_SERVICE_URL}/api/payments/create-session",
-                        json={
-                            "appointment_id": body.consultation_id,
-                            "patient_id": patient_id,
-                            "amount_cents": body.amount_cents,
-                            "currency": currency,
-                        },
-                        timeout=15,
-                    )
-            except httpx.HTTPError as exc:
-                raise HTTPException(status_code=502, detail="Could not create payment session") from exc
-            if not res.is_success:
-                raise HTTPException(status_code=502, detail="Could not create payment session")
-
-            data = res.json()
-            payment_link = data["payment_link"]
-            session_id = data["session_id"]
-
-            row = await conn.fetchrow(
-                """
-                INSERT INTO payments.payments
-                    (consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link)
-                VALUES ($1, $2, $3, $4, $5, 'pending', $6)
-                RETURNING id, consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link, created_at
-                """,
-                body.consultation_id,
-                patient_id,
-                session_id,
-                body.amount_cents,
-                currency,
-                payment_link,
-            )
-
-    await publish_event(
-        "payment.link_created",
-        {
-            "consultation_id": body.consultation_id,
-            "patient_id": patient_id,
-            "payment_link": payment_link,
-            "amount_cents": body.amount_cents,
-            "currency": currency,
-        },
-    )
-
-    return _serialize_payment_record(row)
