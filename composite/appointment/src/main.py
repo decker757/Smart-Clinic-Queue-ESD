@@ -15,7 +15,7 @@ from src.models.appointment import (
     AppointmentResponse,
 )
 from src.services import auth, appointment as appointment_service
-from src.redis_client import get_idempotency, set_idempotency, reserve_idempotency
+from src.redis_client import get_idempotency, set_idempotency, reserve_idempotency, clear_idempotency_reservation
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +165,8 @@ async def create_appointment(
                 await appointment_service.cancel_appointment(appt.id, auth_ctx.token)
             except Exception:
                 pass
+            if x_idempotency_key:
+                await clear_idempotency_reservation(x_idempotency_key)
             if isinstance(e, HTTPException) and e.status_code == 409:
                 raise HTTPException(status_code=409, detail="This time slot was just booked by someone else. Please choose another.")
             raise
@@ -186,6 +188,8 @@ async def create_appointment(
                     )
             except Exception:
                 pass
+            if x_idempotency_key:
+                await clear_idempotency_reservation(x_idempotency_key)
             raise HTTPException(
                 status_code=503,
                 detail="Booking service is temporarily unavailable — please try again in a moment.",

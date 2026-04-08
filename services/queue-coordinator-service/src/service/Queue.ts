@@ -272,8 +272,7 @@ export async function deprioritize(appointment_id: string, travel_eta_minutes: n
 
             const { rows } = await pool.query(`
                 UPDATE queue.queue_entries
-                SET status = 'checked_in',
-                    sort_key = $2,
+                SET sort_key = $2,
                     estimated_arrival_at = NOW() + ($3 * INTERVAL '1 minute'),
                     updated_at = NOW()
                 WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
@@ -284,8 +283,7 @@ export async function deprioritize(appointment_id: string, travel_eta_minutes: n
             // ── Specific booking patient: defer tier-0 until arrival ────────────
             const { rows } = await pool.query(`
                 UPDATE queue.queue_entries
-                SET status = 'checked_in',
-                    estimated_arrival_at = NOW() + ($2 * INTERVAL '1 minute'),
+                SET estimated_arrival_at = NOW() + ($2 * INTERVAL '1 minute'),
                     updated_at = NOW()
                 WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
                 RETURNING *

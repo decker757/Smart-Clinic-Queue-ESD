@@ -76,7 +76,9 @@ async function checkPendingPayments() {
       // Sort newest-first and check only the latest record — earlier 'pending'
       // rows are stale history from before a successful payment was made.
       const sorted = [...all].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      pendingPayment.value = sorted[0]?.status === 'pending' ? sorted[0] : null
+      // Find the most recent pending row — a newer 'failed' row after a link
+      // refresh should not hide the still-valid pending record.
+      pendingPayment.value = sorted.find(p => p.status === 'pending') ?? null
     }
   } catch {
     // non-critical

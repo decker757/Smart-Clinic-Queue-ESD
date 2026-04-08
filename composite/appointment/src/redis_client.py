@@ -141,6 +141,25 @@ async def reserve_idempotency(key: str) -> bool:
         return True  # degrade gracefully on AWS
 
 
+async def clear_idempotency_reservation(key: str) -> None:
+    """Delete a pending reservation so the client can retry immediately.
+
+    Called on any failure after reserve_idempotency() so the key doesn't
+    block retries for the full 60-second TTL.
+    """
+    global _redis
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        val = await r.get(f"idempotency:appt:{key}")
+        if val == "pending":
+            await r.delete(f"idempotency:appt:{key}")
+    except Exception as e:
+        logger.warning("[Redis] failed to clear idempotency reservation (key=%s): %s", key, e)
+        _redis = None
+
+
 async def set_idempotency(key: str, response: dict) -> None:
     """Cache a response under an idempotency key with TTL.
 
