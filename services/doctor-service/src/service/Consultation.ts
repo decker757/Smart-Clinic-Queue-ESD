@@ -66,12 +66,18 @@ export async function claimConsultation(
     }
 
     if (row.completion_status === "failed") {
-        // Previous attempt failed — reset so this retry can proceed.
-        await pool.query(
-            `UPDATE doctors.consultations SET completion_status = 'processing' WHERE appointment_id = $1`,
+        // Previous attempt failed — atomically reset to 'processing' so this
+        // retry can proceed. Use a conditional UPDATE (WHERE completion_status = 'failed')
+        // so only one concurrent retry wins; the rest will observe 'processing' below.
+        const { rowCount } = await pool.query(
+            `UPDATE doctors.consultations SET completion_status = 'processing'
+             WHERE appointment_id = $1 AND completion_status = 'failed'`,
             [appointment_id]
         );
-        return { claimed: true, status: "processing", payment_link: null };
+        if (rowCount && rowCount > 0) {
+            return { claimed: true, status: "processing", payment_link: null };
+        }
+        // Lost the race — another retry already claimed it.
     }
 
     // completion_status = 'processing' — another request is in flight.

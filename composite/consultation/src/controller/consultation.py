@@ -211,17 +211,19 @@ async def complete_consultation(
             completion_status="completed",
         )
     except grpc.RpcError as e:
-        # Finalization failed — all side effects already committed, but the row
-        # stays 'processing' which would strand retries with a 409. Reset to
-        # 'failed' so the next retry can re-enter via claim_consultation.
+        # Finalization failed after all real side effects (appointment marked
+        # complete, Stripe session created, event published) have already committed.
+        # Do NOT reset to 'failed' — re-entry would hit an already-completed
+        # appointment and loop. Leave the row as 'processing' and return 503;
+        # retries will get 409 which is honest ("still being processed"). Ops
+        # can clear the stuck row by calling FinalizeConsultation directly.
         logger.error(
-            "[Consultation] FinalizeConsultation failed for %s: %s — resetting to failed so retry can re-enter",
+            "[Consultation] FinalizeConsultation failed for %s: %s — row left as 'processing', requires ops cleanup",
             body.appointment_id, e.details(),
         )
-        await _mark_failed()
         raise HTTPException(
             status_code=503,
-            detail="Consultation finalization failed — please retry.",
+            detail="Consultation finalization failed — please retry shortly.",
         )
 
     return ConsultationResponse(

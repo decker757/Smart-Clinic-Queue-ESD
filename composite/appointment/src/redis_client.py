@@ -125,10 +125,10 @@ async def reserve_idempotency(user_id: str, key: str) -> bool:
     global _redis
     r = await get_redis()
     if r is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Idempotency store unavailable — please retry shortly",
-        )
+        # Redis is temporarily unavailable — allow the request through without
+        # deduplication rather than blocking all bookings during an outage.
+        logger.warning("[Redis] idempotency store unavailable — proceeding without deduplication (key=%s)", key)
+        return True
     try:
         result = await r.set(_scoped_key(user_id, key), "pending", nx=True, ex=60)
         return result is not None

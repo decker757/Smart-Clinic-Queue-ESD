@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import * as DoctorService from "../service/Doctor";
+import { requireStaff } from "../middleware/auth";
 
 const router = Router();
 
@@ -38,8 +39,8 @@ router.get("/:id/slots", async (req: Request, res: Response) => {
     }
 });
 
-// POST /api/doctors/:id/slots/generate — generate 15-min slots over a date range
-router.post("/:id/slots/generate", async (req: Request, res: Response) => {
+// POST /api/doctors/:id/slots/generate — generate 15-min slots over a date range (staff only)
+router.post("/:id/slots/generate", requireStaff, async (req: Request, res: Response) => {
     try {
         const { start_date, end_date } = req.body;
         if (!start_date || !end_date) {

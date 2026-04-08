@@ -61,5 +61,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     }
 
     (req as any).callerId = payload.sub;
+    // Store role for requireStaff checks. Supports both BetterAuth ("role") and
+    // Cognito ("custom:role") claim names.
+    (req as any).callerRole = (payload["custom:role"] ?? payload["role"] ?? "") as string;
+    next();
+}
+
+export function requireStaff(req: Request, res: Response, next: NextFunction) {
+    const role = (req as any).callerRole as string | undefined;
+    if (!role || !["staff", "doctor", "admin"].includes(role)) {
+        return res.status(403).json({ error: "Staff access required" });
+    }
     next();
 }
