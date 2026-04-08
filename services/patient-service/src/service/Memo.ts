@@ -38,9 +38,14 @@ export async function createDoctorRecord(
         `INSERT INTO patients.patients (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
         [patient_id]
     );
+    // ON CONFLICT: if an MC or prescription already exists for this appointment,
+    // return the existing row unchanged so that consultation completion retries
+    // cannot create duplicate records.
     const { rows } = await pool.query(
         `INSERT INTO patients.memos (patient_id, title, content, record_type, issued_by, appointment_id)
          VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (appointment_id, record_type) WHERE appointment_id IS NOT NULL
+         DO UPDATE SET issued_by = EXCLUDED.issued_by
          RETURNING *`,
         [patient_id, title, content, record_type, issued_by, appointment_id ?? null]
     );

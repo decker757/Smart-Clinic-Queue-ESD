@@ -131,13 +131,27 @@ async def refresh_payment_link(consultation_id: str, auth: AuthContext = Depends
     new_link = data["payment_link"]
     new_session_id = data["session_id"]
 
+    # Insert a new attempt row rather than mutating the existing one.
+    # This preserves attempt history and prevents late Stripe webhooks from the
+    # superseded session racing against the new one.
     async with pool.acquire() as conn:
         await conn.execute(
-            """UPDATE payments.payments
-               SET payment_link = $1, payment_intent_id = $2, status = 'pending'
-               WHERE id = $3""",
-            new_link, new_session_id, row["id"],
+            """INSERT INTO payments.payments
+               (consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link)
+               VALUES ($1, $2, $3, $4, $5, 'pending', $6)""",
+            consultation_id,
+            row["patient_id"],
+            new_session_id,
+            row["amount_cents"],
+            row["currency"] or "sgd",
+            new_link,
         )
+
+    await publish_event("payment.link_created", {
+        "consultation_id": consultation_id,
+        "patient_id": row["patient_id"],
+        "payment_link": new_link,
+    })
 
     return {"payment_link": new_link}
 

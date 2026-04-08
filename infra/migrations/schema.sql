@@ -1,6 +1,6 @@
 -- Full schema for Smart Clinic Queue system.
 -- Run once against a fresh Supabase database.
--- Consolidates migrations 001–014.
+-- Consolidates migrations 001–015.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -185,12 +185,13 @@ CREATE TABLE IF NOT EXISTS patients.patients (
 );
 
 CREATE TABLE IF NOT EXISTS patients.medical_history (
-    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id   TEXT        NOT NULL REFERENCES patients.patients(id),
-    diagnosis    TEXT        NOT NULL,
-    diagnosed_at DATE,
-    notes        TEXT,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id     TEXT        NOT NULL REFERENCES patients.patients(id),
+    diagnosis      TEXT        NOT NULL,
+    diagnosed_at   DATE,
+    notes          TEXT,
+    appointment_id TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS patients.memos (
@@ -207,7 +208,14 @@ CREATE TABLE IF NOT EXISTS patients.memos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_medical_history_patient ON patients.medical_history(patient_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_history_appointment
+    ON patients.medical_history (appointment_id)
+    WHERE appointment_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_memos_patient           ON patients.memos(patient_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_memos_appointment_record_type
+    ON patients.memos (appointment_id, record_type)
+    WHERE appointment_id IS NOT NULL;
 
 -- ─── Doctors ─────────────────────────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS doctors;
@@ -250,13 +258,16 @@ CREATE TABLE IF NOT EXISTS doctors.time_slots (
 );
 
 CREATE TABLE IF NOT EXISTS doctors.consultations (
-    id             UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
-    appointment_id UUID   UNIQUE,
-    doctor_id      TEXT   REFERENCES doctors.doctors(id),
-    patient_id     TEXT   NOT NULL,
-    notes          TEXT,
-    diagnosis      TEXT,
-    created_at     TIMESTAMPTZ DEFAULT NOW()
+    id                 UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    appointment_id     UUID   UNIQUE,
+    doctor_id          TEXT   REFERENCES doctors.doctors(id),
+    patient_id         TEXT   NOT NULL,
+    notes              TEXT,
+    diagnosis          TEXT,
+    completion_status  TEXT   NOT NULL DEFAULT 'processing'
+                              CHECK (completion_status IN ('processing', 'completed', 'failed')),
+    payment_link       TEXT,
+    created_at         TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_consultations_patient ON doctors.consultations(patient_id);

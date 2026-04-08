@@ -8,6 +8,8 @@ service DoctorService {
   rpc UpdateSlotStatus (UpdateSlotStatusRequest) returns (SlotResponse);
   rpc ListDoctors (ListDoctorsRequest) returns (DoctorsResponse);
   rpc AddConsultationNotes (AddConsultationNotesRequest) returns (ConsultationNotesResponse);
+  rpc ClaimConsultation (ClaimConsultationRequest) returns (ClaimConsultationResponse);
+  rpc FinalizeConsultation (FinalizeConsultationRequest) returns (ConsultationNotesResponse);
 }
 
 message GetDoctorRequest {
@@ -63,4 +65,24 @@ message ConsultationNotesResponse {
   string doctor_id      = 3;
   string patient_id     = 4;
   string created_at     = 5;
+}
+
+message ClaimConsultationRequest {
+  string appointment_id = 1;
+  string doctor_id      = 2;
+  string patient_id     = 3;
+}
+
+message ClaimConsultationResponse {
+  bool   claimed      = 1;  // true if this call now owns the consultation
+  string status       = 2;  // "processing" | "completed" | "in_progress"
+  string payment_link = 3;  // populated when status = "completed"
+}
+
+message FinalizeConsultationRequest {
+  string appointment_id      = 1;
+  string notes               = 2;
+  string diagnosis           = 3;
+  string payment_link        = 4;
+  string completion_status   = 5;  // "completed" | "failed"
 }

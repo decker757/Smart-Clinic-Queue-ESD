@@ -129,20 +129,27 @@ async def create_appointment(
     # Atomically reserve the key before proceeding so concurrent retries don't both
     # create an appointment and then race to write the same cache entry.
     if x_idempotency_key:
-        cached = await get_idempotency(x_idempotency_key)
+        cached = await get_idempotency(auth_ctx.user_id, x_idempotency_key)
         if cached:
             return cached
-        reserved = await reserve_idempotency(x_idempotency_key)
+        reserved = await reserve_idempotency(auth_ctx.user_id, x_idempotency_key)
         if not reserved:
             raise HTTPException(
                 status_code=409,
                 detail="A booking with this idempotency key is already in progress. Please retry after a moment.",
             )
 
-    appt = await appointment_service.create_appointment(
-        AppointmentServiceRequest(**body.model_dump(exclude={"slot_id"})),
-        auth_ctx.token,
-    )
+    try:
+        appt = await appointment_service.create_appointment(
+            AppointmentServiceRequest(**body.model_dump(exclude={"slot_id"})),
+            auth_ctx.token,
+        )
+    except Exception:
+        # Appointment creation failed — release the reservation so the client
+        # can retry immediately with the same idempotency key.
+        if x_idempotency_key:
+            await clear_idempotency_reservation(auth_ctx.user_id, x_idempotency_key)
+        raise
 
     event_payload = AppointmentBookedEvent(
         appointment_id=appt.id,
@@ -166,7 +173,7 @@ async def create_appointment(
             except Exception:
                 pass
             if x_idempotency_key:
-                await clear_idempotency_reservation(x_idempotency_key)
+                await clear_idempotency_reservation(auth_ctx.user_id, x_idempotency_key)
             if isinstance(e, HTTPException) and e.status_code == 409:
                 raise HTTPException(status_code=409, detail="This time slot was just booked by someone else. Please choose another.")
             raise
@@ -189,7 +196,7 @@ async def create_appointment(
             except Exception:
                 pass
             if x_idempotency_key:
-                await clear_idempotency_reservation(x_idempotency_key)
+                await clear_idempotency_reservation(auth_ctx.user_id, x_idempotency_key)
             raise HTTPException(
                 status_code=503,
                 detail="Booking service is temporarily unavailable — please try again in a moment.",
@@ -199,7 +206,12 @@ async def create_appointment(
     response = appt.model_dump(mode="json")
 
     if x_idempotency_key:
-        await set_idempotency(x_idempotency_key, response)
+        try:
+            await set_idempotency(auth_ctx.user_id, x_idempotency_key, response)
+        except Exception as e:
+            # Booking already committed — cache failure must not surface as a
+            # 503 to the client or they will retry and create a duplicate booking.
+            logger.warning("[Idempotency] cache write failed for key=%s: %s", x_idempotency_key, e)
 
     return response
 

@@ -62,6 +62,7 @@ message AddHistoryRequest {
   string diagnosis     = 2;
   string diagnosed_at  = 3; // optional, empty string if not provided
   string notes         = 4; // optional, empty string if not provided
+  string appointment_id = 5; // optional; when set, enforces one history entry per appointment
 }
 
 message HistoryResponse {

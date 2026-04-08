@@ -21,17 +21,21 @@ export async function getHistory(patient_id: string): Promise<MedicalHistory[]> 
 
 export async function addHistory(
     patient_id: string,
-    data: { diagnosis: string; diagnosed_at?: string; notes?: string }
+    data: { diagnosis: string; diagnosed_at?: string; notes?: string; appointment_id?: string }
 ): Promise<MedicalHistory> {
     await pool.query(
         `INSERT INTO patients.patients (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
         [patient_id]
     );
+    // ON CONFLICT: if a history entry already exists for this appointment,
+    // return the existing row so consultation completion retries are idempotent.
     const { rows } = await pool.query(
-        `INSERT INTO patients.medical_history (patient_id, diagnosis, diagnosed_at, notes)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO patients.medical_history (patient_id, diagnosis, diagnosed_at, notes, appointment_id)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (appointment_id) WHERE appointment_id IS NOT NULL
+         DO UPDATE SET diagnosis = EXCLUDED.diagnosis
          RETURNING *`,
-        [patient_id, data.diagnosis, data.diagnosed_at ?? null, data.notes ?? null]
+        [patient_id, data.diagnosis, data.diagnosed_at ?? null, data.notes ?? null, data.appointment_id ?? null]
     );
     return rows[0] as MedicalHistory;
 }

@@ -40,8 +40,13 @@ async def add_history(
     diagnosis: str,
     notes: str = "",
     diagnosed_at: str = "",
+    appointment_id: str = "",
 ):
-    """Add a history entry to the patient's medical record."""
+    """Add a history entry to the patient's medical record.
+
+    When appointment_id is provided the write is idempotent — retrying the same
+    consultation completion will not create a duplicate history row.
+    """
     async with _channel() as channel:
         stub = patient_pb2_grpc.PatientServiceStub(channel)
         response = await stub.AddHistory(
@@ -50,6 +55,7 @@ async def add_history(
                 diagnosis=diagnosis,
                 notes=notes,
                 diagnosed_at=diagnosed_at,
+                appointment_id=appointment_id,
             ),
             timeout=10,
         )

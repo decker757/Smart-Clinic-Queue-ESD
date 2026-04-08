@@ -95,6 +95,45 @@ const handlers = {
             callback({ code: grpc.status.INTERNAL, message: e.message });
         }
     },
+
+    ClaimConsultation: async (call: any, callback: any) => {
+        try {
+            const result = await ConsultationService.claimConsultation(
+                call.request.appointment_id,
+                call.request.doctor_id,
+                call.request.patient_id,
+            );
+            callback(null, {
+                claimed: result.claimed,
+                status: result.status,
+                payment_link: result.payment_link ?? "",
+            });
+        } catch (e: any) {
+            callback({ code: grpc.status.INTERNAL, message: e.message });
+        }
+    },
+
+    FinalizeConsultation: async (call: any, callback: any) => {
+        try {
+            await ConsultationService.finalizeConsultation(
+                call.request.appointment_id,
+                call.request.notes,
+                call.request.diagnosis,
+                call.request.payment_link || null,
+                call.request.completion_status as "completed" | "failed",
+            );
+            // Return a minimal ConsultationNotesResponse (id not meaningful here)
+            callback(null, {
+                id: "",
+                appointment_id: call.request.appointment_id,
+                doctor_id: "",
+                patient_id: "",
+                created_at: new Date().toISOString(),
+            });
+        } catch (e: any) {
+            callback({ code: grpc.status.INTERNAL, message: e.message });
+        }
+    },
 };
 
 export function startGrpcServer(): void {

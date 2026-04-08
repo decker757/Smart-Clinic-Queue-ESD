@@ -72,7 +72,12 @@ async def get_redis() -> Optional[aioredis.Redis]:
     return _redis
 
 
-async def get_idempotency(key: str) -> Optional[dict]:
+def _scoped_key(user_id: str, key: str) -> str:
+    """Scope an idempotency key to a specific user to prevent cross-tenant cache hits."""
+    return f"idempotency:appt:{user_id}:{key}"
+
+
+async def get_idempotency(user_id: str, key: str) -> Optional[dict]:
     """Return cached response for an idempotency key, or None.
 
     Local Docker keeps strict idempotency guarantees. AWS rediss degrades
@@ -89,7 +94,7 @@ async def get_idempotency(key: str) -> Optional[dict]:
         logger.warning("[Redis] skipping idempotency check (Redis unavailable)")
         return None
     try:
-        cached = await r.get(f"idempotency:appt:{key}")
+        cached = await r.get(_scoped_key(user_id, key))
         if cached and cached != "pending":
             return json.loads(cached)
         return None
@@ -104,7 +109,7 @@ async def get_idempotency(key: str) -> Optional[dict]:
         return None
 
 
-async def reserve_idempotency(key: str) -> bool:
+async def reserve_idempotency(user_id: str, key: str) -> bool:
     """Atomically claim an idempotency key before creating the appointment.
 
     Uses SET NX so only one concurrent request can proceed; the rest get False
@@ -125,7 +130,7 @@ async def reserve_idempotency(key: str) -> bool:
             detail="Idempotency store unavailable — please retry shortly",
         )
     try:
-        result = await r.set(f"idempotency:appt:{key}", "pending", nx=True, ex=60)
+        result = await r.set(_scoped_key(user_id, key), "pending", nx=True, ex=60)
         return result is not None
     except Exception as e:
         logger.error("[Redis] idempotency reserve failed (key=%s): %s", key, e)
@@ -136,7 +141,7 @@ async def reserve_idempotency(key: str) -> bool:
         )
 
 
-async def clear_idempotency_reservation(key: str) -> None:
+async def clear_idempotency_reservation(user_id: str, key: str) -> None:
     """Delete a pending reservation so the client can retry immediately.
 
     Called on any failure after reserve_idempotency() so the key doesn't
@@ -147,15 +152,15 @@ async def clear_idempotency_reservation(key: str) -> None:
     if r is None:
         return
     try:
-        val = await r.get(f"idempotency:appt:{key}")
+        val = await r.get(_scoped_key(user_id, key))
         if val == "pending":
-            await r.delete(f"idempotency:appt:{key}")
+            await r.delete(_scoped_key(user_id, key))
     except Exception as e:
         logger.warning("[Redis] failed to clear idempotency reservation (key=%s): %s", key, e)
         _redis = None
 
 
-async def set_idempotency(key: str, response: dict) -> None:
+async def set_idempotency(user_id: str, key: str, response: dict) -> None:
     """Cache a response under an idempotency key with TTL.
 
     Local Docker fails closed. AWS rediss skips caching if the managed
@@ -173,7 +178,7 @@ async def set_idempotency(key: str, response: dict) -> None:
         return
     try:
         await r.setex(
-            f"idempotency:appt:{key}",
+            _scoped_key(user_id, key),
             IDEMPOTENCY_TTL,
             json.dumps(response),
         )
