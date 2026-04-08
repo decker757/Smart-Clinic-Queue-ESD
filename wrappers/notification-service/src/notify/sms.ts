@@ -10,11 +10,11 @@ let client: ReturnType<typeof twilio> | null = null;
 
 if (SMS_ENABLED) {
     if (!TWILIO_SID || !TWILIO_TOKEN || !FROM) {
-        console.error("[SMS] Missing required env vars: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER");
-        process.exit(1);
+        console.warn("[SMS] Missing Twilio env vars (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER) — falling back to dry-run mode. Set SMS_ENABLED=false to suppress this warning.");
+    } else {
+        client = twilio(TWILIO_SID, TWILIO_TOKEN);
+        console.log("[SMS] Twilio client initialised");
     }
-    client = twilio(TWILIO_SID, TWILIO_TOKEN);
-    console.log("[SMS] Twilio client initialised");
 } else {
     console.log("[SMS] Disabled (SMS_ENABLED=false) — messages will be logged but not sent");
 }

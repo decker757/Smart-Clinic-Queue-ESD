@@ -29,6 +29,7 @@ const selectedDate = ref('')
 const availableSlots = ref([])
 const selectedSlot = ref(null)
 const slotsLoading = ref(false)
+const bookingIdempotencyKey = ref(crypto.randomUUID())
 let slotsAbortController = null
 let redirectTimer = null
 
@@ -145,17 +146,19 @@ async function bookAppointment() {
   loading.value = true
   error.value = ''
   success.value = ''
-  const idempotencyKey = crypto.randomUUID()
   try {
     const res = await fetch(`${API}/api/composite/appointments`, {
       method: 'POST',
-      headers: { ...authHeaders(), 'X-Idempotency-Key': idempotencyKey },
+      headers: { ...authHeaders(), 'X-Idempotency-Key': bookingIdempotencyKey.value },
       body: JSON.stringify(body),
     })
     if (!res.ok) {
       const resp = await res.json().catch(() => ({}))
       throw new Error(resp.detail ?? resp.error ?? 'Booking failed')
     }
+    // Rotate the key after a confirmed success so a new booking attempt
+    // for a different slot doesn't reuse the same key.
+    bookingIdempotencyKey.value = crypto.randomUUID()
     success.value = 'Appointment booked successfully!'
     redirectTimer = setTimeout(() => router.push('/dashboard'), 1500)
   } catch (e) {
