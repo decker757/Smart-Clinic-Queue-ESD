@@ -47,6 +47,17 @@ section "Reset"
 curl -sf -X POST "$QUEUE/api/queue/reset" > /dev/null
 pass "Queue reset"
 
+# Cancel any leftover scheduled appointments for the 3 test patients
+# so they don't appear as stale on the dashboard.
+COMPOSE_FILE="$(dirname "$0")/../docker-compose.yml"
+docker compose -f "$COMPOSE_FILE" exec -T app-db psql -U app -d clinic -q -c "
+  UPDATE appointments.appointments
+  SET status = 'cancelled'
+  WHERE status IN ('scheduled','checked_in','in_progress')
+    AND patient_id IN (SELECT id FROM betterauth.\"user\" WHERE email LIKE '%@clinic.com');
+" 2>/dev/null
+pass "Stale appointments cancelled"
+
 # ── Authenticate ──────────────────────────────────────────────────────────────
 
 section "Authenticating patients"
@@ -144,6 +155,14 @@ for i in 1 2 3; do
     "SELECT email FROM betterauth.\"user\" WHERE id = '$CALLED';" 2>/dev/null)
   pass "Call $i → $EMAIL"
 done
+
+# Mark all test appointments as completed so nothing lingers on the dashboard
+docker compose -f "$COMPOSE_FILE" exec -T app-db psql -U app -d clinic -q -c "
+  UPDATE appointments.appointments SET status = 'completed'
+  WHERE id IN ('$APPT1','$APPT2','$APPT3');
+  UPDATE queue.queue_entries SET status = 'done'
+  WHERE appointment_id IN ('$APPT1','$APPT2','$APPT3');
+" 2>/dev/null
 
 printf "\n\033[32mScenario complete.\033[0m\n"
 printf "  Patient 1 booked first but arrived late.\n"
