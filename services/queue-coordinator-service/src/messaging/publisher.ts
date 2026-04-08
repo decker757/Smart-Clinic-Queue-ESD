@@ -26,23 +26,25 @@ export async function initPublisher(): Promise<void> {
     console.log("[Publisher] RabbitMQ publisher initialized");
 }
 
-export function publishApproaching(payload: object): void {
-    if (!channel) return;
+export function publishApproaching(payload: object): boolean {
+    if (!channel) return false;
     channel.publish(
         EXCHANGE,
         "queue.approaching",
         Buffer.from(JSON.stringify(payload)),
         { contentType: "application/json", persistent: true },
     );
+    return true;
 }
 
-export function publishApproachingWithTtl(payload: object): void {
-    if (!channel) return;
+export function publishApproachingWithTtl(payload: object): boolean {
+    if (!channel) return false;
     channel.sendToQueue(
         APPROACHING_TTL_QUEUE,
         Buffer.from(JSON.stringify(payload)),
         { contentType: "application/json", persistent: true },
     );
+    return true;
 }
 
 export function publishEvent(routingKey: string, payload: object): void {

@@ -50,6 +50,21 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -97,6 +112,21 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -116,11 +146,16 @@
           },
           "appointment_time": {
             "anyOf": [
-              { "type": "string", "format": "date-time" },
-              { "type": "null" }
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Appointment Time",
-            "description": "Required for specific doctor bookings — used to detect late arrival. Omit or set to null for generic session-only bookings; late detection is skipped and the patient is checked in directly."
+            "description": "Required for specific doctor bookings \u2014 used to detect late arrival. Omit or set to null for generic session-only bookings; late detection is skipped and the patient is checked in directly."
           },
           "patient_location": {
             "$ref": "#/components/schemas/Location"

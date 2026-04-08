@@ -211,13 +211,17 @@ async def complete_consultation(
             completion_status="completed",
         )
     except grpc.RpcError as e:
-        # Finalization failure is non-critical at this point — all side effects
-        # have already committed. Log so ops can investigate, but don't fail the
-        # response; a duplicate retry would return the cached result anyway once
-        # status is eventually corrected.
+        # Finalization failed — all side effects already committed, but the row
+        # stays 'processing' which would strand retries with a 409. Reset to
+        # 'failed' so the next retry can re-enter via claim_consultation.
         logger.error(
-            "[Consultation] FinalizeConsultation failed for %s: %s — outbox may need manual correction",
+            "[Consultation] FinalizeConsultation failed for %s: %s — resetting to failed so retry can re-enter",
             body.appointment_id, e.details(),
+        )
+        await _mark_failed()
+        raise HTTPException(
+            status_code=503,
+            detail="Consultation finalization failed — please retry.",
         )
 
     return ConsultationResponse(
