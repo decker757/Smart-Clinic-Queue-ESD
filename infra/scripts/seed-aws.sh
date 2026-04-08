@@ -31,7 +31,7 @@ done
 
 POOL_ID="$COGNITO_USER_POOL_ID"
 REGION="$AWS_REGION"
-PASSWORD="Test1234!"   # Cognito requires upper+lower+digit+symbol
+PASSWORD="Password123!"   # Cognito requires upper+lower+digit+symbol
 
 # Load DB_URL, strip ?options=... if present
 RAW_URL="$DB_URL"
