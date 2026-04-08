@@ -22,6 +22,7 @@ class PaymentServiceServicer(payment_pb2_grpc.PaymentServiceServicer):
                 currency=settings.CURRENCY,
                 consultation_id=request.appointment_id,
                 patient_id=request.patient_id,
+                idempotency_key=request.appointment_id,
             )
             await publish_event("payment.pending", {
                 "consultation_id": request.appointment_id,

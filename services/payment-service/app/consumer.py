@@ -32,6 +32,10 @@ async def _record_payment(status: str, payload: dict):
             INSERT INTO payments.payments
                 (consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (consultation_id, payment_intent_id)
+            DO UPDATE SET
+                status       = EXCLUDED.status,
+                payment_link = EXCLUDED.payment_link
             """,
             payload.get("consultation_id"),
             payload.get("patient_id"),
