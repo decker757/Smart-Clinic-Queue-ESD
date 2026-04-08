@@ -227,14 +227,20 @@ async def complete_consultation(
                 completion_status="completed",
             )
         except grpc.RpcError as e2:
-            # Both attempts failed. All side effects are committed and cannot be
-            # undone, so return success to the client (prevents retry loops that
-            # would 409 forever). The row stays 'processing' — ops must call
-            # FinalizeConsultation directly to close it out.
+            # Both attempts failed. Reset to 'failed' so the next retry can
+            # re-enter via claim_consultation instead of 409-ing forever.
+            # Individual steps (mark_complete, Stripe session) are idempotent
+            # so re-entry is safe. If _mark_failed also fails (doctor-service
+            # still down), the row stays 'processing' and ops must intervene.
             logger.error(
                 "[Consultation] FinalizeConsultation retry also failed for %s: %s"
-                " — row left as 'processing', requires ops cleanup",
+                " — attempting reset to failed for retry recovery",
                 body.appointment_id, e2.details(),
+            )
+            await _mark_failed()
+            raise HTTPException(
+                status_code=503,
+                detail="Consultation finalization failed — please retry shortly.",
             )
 
     return ConsultationResponse(

@@ -76,9 +76,10 @@ async function checkPendingPayments() {
       // Sort newest-first and check only the latest record — earlier 'pending'
       // rows are stale history from before a successful payment was made.
       const sorted = [...all].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      // Find the most recent pending row — a newer 'failed' row after a link
-      // refresh should not hide the still-valid pending record.
-      pendingPayment.value = sorted.find(p => p.status === 'pending') ?? null
+      // Only show pending banner if no payment has been completed yet.
+      // A stale 'pending' row must not reappear after a newer 'paid' row exists.
+      const hasPaid = all.some(p => p.status === 'paid' || p.status === 'completed')
+      pendingPayment.value = hasPaid ? null : (sorted.find(p => p.status === 'pending') ?? null)
     }
   } catch {
     // non-critical
