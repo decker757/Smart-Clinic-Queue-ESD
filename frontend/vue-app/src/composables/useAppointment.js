@@ -222,7 +222,7 @@ export function useAppointment() {
    * Returns { status: 'checked_in' | 'late', eta_minutes: number }
    */
   async function checkInOrchestrator({ appointmentId, patientId, appointmentTime, patientLocation }) {
-    const CLINIC_LOCATION = { lat: 1.3521, lng: 103.8198 }
+    const CLINIC_LOCATION = { lat: 1.4295, lng: 103.8353 }
     const res = await fetch(`${API_BASE}/api/check-in`, {
       method: 'POST',
       headers: { ...authHeaders(authStore.jwt), 'Content-Type': 'application/json' },

@@ -131,7 +131,7 @@ export function useAuth() {
       if (AUTH_MODE === 'cognito') {
         await cognitoRequest('SignUp', {
           ClientId: COGNITO_CLIENT_ID,
-          Username: (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+          Username: email,
           Password: password,
           UserAttributes: [
             { Name: 'email', Value: email },
