@@ -213,18 +213,29 @@ async def complete_consultation(
     except grpc.RpcError as e:
         # Finalization failed after all real side effects (appointment marked
         # complete, Stripe session created, event published) have already committed.
-        # Do NOT reset to 'failed' — re-entry would hit an already-completed
-        # appointment and loop. Leave the row as 'processing' and return 503;
-        # retries will get 409 which is honest ("still being processed"). Ops
-        # can clear the stuck row by calling FinalizeConsultation directly.
-        logger.error(
-            "[Consultation] FinalizeConsultation failed for %s: %s — row left as 'processing', requires ops cleanup",
+        # Retry once before giving up.
+        logger.warning(
+            "[Consultation] FinalizeConsultation failed for %s: %s — retrying once",
             body.appointment_id, e.details(),
         )
-        raise HTTPException(
-            status_code=503,
-            detail="Consultation finalization failed — please retry shortly.",
-        )
+        try:
+            await doctor_svc.finalize_consultation(
+                appointment_id=body.appointment_id,
+                notes=body.consultation_notes or "",
+                diagnosis=body.diagnosis or "",
+                payment_link=payment_link or "",
+                completion_status="completed",
+            )
+        except grpc.RpcError as e2:
+            # Both attempts failed. All side effects are committed and cannot be
+            # undone, so return success to the client (prevents retry loops that
+            # would 409 forever). The row stays 'processing' — ops must call
+            # FinalizeConsultation directly to close it out.
+            logger.error(
+                "[Consultation] FinalizeConsultation retry also failed for %s: %s"
+                " — row left as 'processing', requires ops cleanup",
+                body.appointment_id, e2.details(),
+            )
 
     return ConsultationResponse(
         appointment_id=body.appointment_id,

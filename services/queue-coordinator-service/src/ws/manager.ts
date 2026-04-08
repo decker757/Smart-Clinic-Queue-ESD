@@ -278,8 +278,10 @@ export async function broadcastAllPatientPositions(): Promise<void> {
                 patient_id: row.patient_id,
                 appointment_id: row.appointment_id,
             };
-            const published = publishApproaching(payload) || publishApproachingWithTtl(payload);
-            if (published) {
+            // Call both independently — do not short-circuit with ||.
+            const p1 = publishApproaching(payload);
+            const p2 = publishApproachingWithTtl(payload);
+            if (p1 || p2) {
                 markApproachingNotified(row.appointment_id).catch(
                     (e) => console.error("[Approaching] Failed to mark notified:", e)
                 );
