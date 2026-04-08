@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     AUTH_SERVICE_URL: str = "http://auth-service:3000"
     JWKS_URL: str = "http://auth-service:3000/api/auth/jwks"
     LATE_TTL_MS: int = 5 * 60 * 1000  # override for testing: set to e.g. 10000
+    QUEUE_COORDINATOR_URL: str = "http://queue-coordinator-service:3002"
 
     class Config:
         env_file = ".env"

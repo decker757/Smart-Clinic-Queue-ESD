@@ -274,20 +274,50 @@ export async function deprioritize(appointment_id: string, travel_eta_minutes: n
                 UPDATE queue.queue_entries
                 SET sort_key = $2,
                     estimated_arrival_at = NOW() + ($3 * INTERVAL '1 minute'),
+                    status = CASE WHEN status = 'checked_in' THEN 'waiting' ELSE status END,
                     updated_at = NOW()
                 WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
                 RETURNING *
             `, [appointment_id, newSortKey, travel_eta_minutes]);
             updated = rows[0];
         } else {
-            // ── Specific booking patient: defer tier-0 until arrival ────────────
+            // ── Specific booking patient: shift by slot bands (same logic as session queue) ──
+            const slots_to_shift = Math.max(1, Math.ceil(travel_eta_minutes / 15));
+
+            const { rows: peers } = await pool.query(`
+                SELECT COALESCE(sort_key, queue_number * 1000) AS sort_key
+                FROM queue.queue_entries
+                WHERE doctor_id = $1
+                  AND status NOT IN ('done', 'cancelled')
+                ORDER BY COALESCE(sort_key, queue_number * 1000) ASC, queue_number ASC
+            `, [current.doctor_id]);
+
+            const currentSortKey = Number(current.sort_key ?? (current.queue_number * 1000));
+            const currentPos = peers.findIndex((r: any) => Number(r.sort_key) === currentSortKey);
+            const targetPos = Math.min(
+                currentPos === -1 ? peers.length - 1 : currentPos + slots_to_shift,
+                peers.length - 1
+            );
+
+            let newSortKey: number;
+            if (peers.length === 0 || targetPos >= peers.length - 1) {
+                const last = peers[peers.length - 1];
+                newSortKey = (last ? Number(last.sort_key) : currentSortKey) + 1000;
+            } else {
+                const targetSortKey = Number(peers[targetPos].sort_key);
+                const nextSortKey   = Number(peers[targetPos + 1].sort_key);
+                newSortKey = targetSortKey + Math.floor((nextSortKey - targetSortKey) / 2);
+            }
+
             const { rows } = await pool.query(`
                 UPDATE queue.queue_entries
-                SET estimated_arrival_at = NOW() + ($2 * INTERVAL '1 minute'),
+                SET sort_key = $2,
+                    estimated_arrival_at = NOW() + ($3 * INTERVAL '1 minute'),
+                    status = CASE WHEN status = 'checked_in' THEN 'waiting' ELSE status END,
                     updated_at = NOW()
                 WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
                 RETURNING *
-            `, [appointment_id, travel_eta_minutes]);
+            `, [appointment_id, newSortKey, travel_eta_minutes]);
             updated = rows[0];
         }
 

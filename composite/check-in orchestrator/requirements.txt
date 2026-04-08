@@ -7,3 +7,4 @@ grpcio-tools
 python-dotenv
 pydantic-settings
 PyJWT[crypto]
+httpx

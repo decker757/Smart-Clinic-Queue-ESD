@@ -1,6 +1,11 @@
+import httpx
+import logging
 from datetime import datetime, timedelta, timezone
 from app.clients.eta_client import get_travel_time
 from app.messaging.publisher import publish_event, publish_late_with_ttl
+from app.config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def process_check_in(body):
@@ -13,7 +18,17 @@ async def process_check_in(body):
     arrival_time = now + timedelta(minutes=eta_minutes)
 
     if body.appointment_time is None or arrival_time <= body.appointment_time:
-        # Patient is on time
+        # Patient is on time — call queue-coordinator directly for immediate WS broadcast,
+        # then publish the RabbitMQ event for activity-log and other consumers.
+        # The consumer handles "already checked in" gracefully if the event arrives after.
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"{settings.QUEUE_COORDINATOR_URL}/api/queue/checkin/{body.appointment_id}"
+                )
+        except Exception as e:
+            logger.warning("Direct queue-coordinator check-in call failed: %s", e)
+
         await publish_event("queue.checked_in", {
             "patient_id": body.patient_id,
             "appointment_id": body.appointment_id,
