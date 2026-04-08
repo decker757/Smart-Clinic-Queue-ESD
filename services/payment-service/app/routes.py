@@ -215,53 +215,60 @@ async def create_billing(body: CreateBillingRequest, auth: AuthContext = Depends
     if not patient_id:
         raise HTTPException(status_code=400, detail="Consultation is missing a patient_id")
 
-    # Prevent duplicate billing
+    # Serialize concurrent submissions for the same consultation using a
+    # PostgreSQL advisory lock. The lock is held for the duration of the
+    # transaction (check → Stripe call → insert) so two concurrent staff
+    # clicks cannot both pass the duplicate check and generate two payment links.
     async with pool.acquire() as conn:
-        existing = await conn.fetchrow(
-            "SELECT id FROM payments.payments WHERE consultation_id = $1 LIMIT 1",
-            body.consultation_id,
-        )
-    if existing:
-        raise HTTPException(status_code=400, detail="Billing already created for this consultation")
-
-    # Create Stripe checkout session with the staff-designated amount
-    try:
-        async with httpx.AsyncClient() as client:
-            res = await client.post(
-                f"{settings.STRIPE_SERVICE_URL}/api/payments/create-session",
-                json={
-                    "appointment_id": body.consultation_id,
-                    "patient_id": patient_id,
-                    "amount_cents": body.amount_cents,
-                    "currency": currency,
-                },
-                timeout=15,
+        async with conn.transaction():
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtext($1))",
+                body.consultation_id,
             )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail="Could not create payment session") from exc
-    if not res.is_success:
-        raise HTTPException(status_code=502, detail="Could not create payment session")
+            existing = await conn.fetchrow(
+                "SELECT id FROM payments.payments WHERE consultation_id = $1 LIMIT 1",
+                body.consultation_id,
+            )
+            if existing:
+                raise HTTPException(status_code=400, detail="Billing already created for this consultation")
 
-    data = res.json()
-    payment_link = data["payment_link"]
-    session_id = data["session_id"]
+            # Create Stripe checkout session (inside the advisory lock so only
+            # one request reaches Stripe per consultation).
+            try:
+                async with httpx.AsyncClient() as client:
+                    res = await client.post(
+                        f"{settings.STRIPE_SERVICE_URL}/api/payments/create-session",
+                        json={
+                            "appointment_id": body.consultation_id,
+                            "patient_id": patient_id,
+                            "amount_cents": body.amount_cents,
+                            "currency": currency,
+                        },
+                        timeout=15,
+                    )
+            except httpx.HTTPError as exc:
+                raise HTTPException(status_code=502, detail="Could not create payment session") from exc
+            if not res.is_success:
+                raise HTTPException(status_code=502, detail="Could not create payment session")
 
-    # Insert payment record
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            INSERT INTO payments.payments
-                (consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link)
-            VALUES ($1, $2, $3, $4, $5, 'pending', $6)
-            RETURNING id, consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link, created_at
-            """,
-            body.consultation_id,
-            patient_id,
-            session_id,
-            body.amount_cents,
-            currency,
-            payment_link,
-        )
+            data = res.json()
+            payment_link = data["payment_link"]
+            session_id = data["session_id"]
+
+            row = await conn.fetchrow(
+                """
+                INSERT INTO payments.payments
+                    (consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link)
+                VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+                RETURNING id, consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link, created_at
+                """,
+                body.consultation_id,
+                patient_id,
+                session_id,
+                body.amount_cents,
+                currency,
+                payment_link,
+            )
 
     await publish_event(
         "payment.link_created",

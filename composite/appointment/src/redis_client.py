@@ -90,7 +90,7 @@ async def get_idempotency(key: str) -> Optional[dict]:
         return None
     try:
         cached = await r.get(f"idempotency:appt:{key}")
-        if cached:
+        if cached and cached != "pending":
             return json.loads(cached)
         return None
     except Exception as e:
@@ -102,6 +102,43 @@ async def get_idempotency(key: str) -> Optional[dict]:
                 detail="Idempotency store unavailable — please retry shortly",
             )
         return None
+
+
+async def reserve_idempotency(key: str) -> bool:
+    """Atomically claim an idempotency key before creating the appointment.
+
+    Uses SET NX so only one concurrent request can proceed; the rest get False
+    and should return 409. The reservation expires after 60 s so a crashed
+    request doesn't permanently block future retries. set_idempotency()
+    overwrites the "pending" marker with the real response once the request
+    succeeds.
+
+    Returns True if the key was successfully reserved (caller may proceed).
+    Returns False if another request already holds the key.
+    Degrades gracefully on AWS when Redis is temporarily unavailable.
+    """
+    global _redis
+    r = await get_redis()
+    if r is None:
+        if not _is_aws_tls_redis():
+            raise HTTPException(
+                status_code=503,
+                detail="Idempotency store unavailable — please retry shortly",
+            )
+        logger.warning("[Redis] skipping idempotency reservation (Redis unavailable)")
+        return True  # degrade gracefully on AWS
+    try:
+        result = await r.set(f"idempotency:appt:{key}", "pending", nx=True, ex=60)
+        return result is not None
+    except Exception as e:
+        logger.error("[Redis] idempotency reserve failed (key=%s): %s", key, e)
+        _redis = None
+        if not _is_aws_tls_redis():
+            raise HTTPException(
+                status_code=503,
+                detail="Idempotency store unavailable — please retry shortly",
+            )
+        return True  # degrade gracefully on AWS
 
 
 async def set_idempotency(key: str, response: dict) -> None:

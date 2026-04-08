@@ -15,7 +15,7 @@ from src.models.appointment import (
     AppointmentResponse,
 )
 from src.services import auth, appointment as appointment_service
-from src.redis_client import get_idempotency, set_idempotency
+from src.redis_client import get_idempotency, set_idempotency, reserve_idempotency
 
 logger = logging.getLogger(__name__)
 
@@ -125,11 +125,19 @@ async def create_appointment(
     if body.patient_id != auth_ctx.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Return cached response for duplicate requests (client retry after network failure)
+    # Return cached response for duplicate requests (client retry after network failure).
+    # Atomically reserve the key before proceeding so concurrent retries don't both
+    # create an appointment and then race to write the same cache entry.
     if x_idempotency_key:
         cached = await get_idempotency(x_idempotency_key)
         if cached:
             return cached
+        reserved = await reserve_idempotency(x_idempotency_key)
+        if not reserved:
+            raise HTTPException(
+                status_code=409,
+                detail="A booking with this idempotency key is already in progress. Please retry after a moment.",
+            )
 
     appt = await appointment_service.create_appointment(
         AppointmentServiceRequest(**body.model_dump(exclude={"slot_id"})),
@@ -146,35 +154,29 @@ async def create_appointment(
 
     publish_failed = False
     if body.slot_id:
+        # Claim the slot first — only publish the event once we know the slot is ours.
+        # Running both concurrently (asyncio.gather) risks publishing appointment.booked
+        # for a slot that is then rejected with 409.
         try:
-            # mark_slot_booked and publish_event are independent — run concurrently
-            await asyncio.gather(
-                appointment_service.mark_slot_booked(body.slot_id, auth_ctx.token),
-                publish_event("appointment.booked", event_payload),
-            )
+            await appointment_service.mark_slot_booked(body.slot_id, auth_ctx.token)
         except HTTPException as e:
             if e.status_code == 409:
-                # Slot was taken by a concurrent booking — cancel the just-created appointment
+                # Slot was taken by a concurrent booking — roll back appointment record.
                 try:
                     await appointment_service.cancel_appointment(appt.id, auth_ctx.token)
                 except Exception:
                     pass
                 raise HTTPException(status_code=409, detail="This time slot was just booked by someone else. Please choose another.")
-            if e.status_code == 503:
-                # Publish failed but slot was booked — appointment is valid, queue entry missing
-                publish_failed = True
-                logger.error("Event publish failed for appointment %s — queue entry will be missing", appt.id)
-            else:
-                raise
-    else:
-        try:
-            await publish_event("appointment.booked", event_payload)
-        except HTTPException as e:
-            if e.status_code == 503:
-                publish_failed = True
-                logger.error("Event publish failed for appointment %s — queue entry will be missing", appt.id)
-            else:
-                raise
+            raise
+
+    try:
+        await publish_event("appointment.booked", event_payload)
+    except HTTPException as e:
+        if e.status_code == 503:
+            publish_failed = True
+            logger.error("Event publish failed for appointment %s — queue entry will be missing", appt.id)
+        else:
+            raise
 
     response = appt.model_dump(mode="json")
     if publish_failed:
