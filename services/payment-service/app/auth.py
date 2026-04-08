@@ -24,6 +24,19 @@ def _get_jwks_client() -> PyJWKClient:
     return _jwks_client
 
 
+def _decode_kwargs() -> dict:
+    # AWS Cognito JWKS URLs end with /.well-known/jwks.json; local BetterAuth does not.
+    if settings.JWKS_URL.endswith("/.well-known/jwks.json"):
+        return {
+            "issuer": settings.JWKS_URL.removesuffix("/.well-known/jwks.json"),
+            "options": {"verify_aud": False},
+        }
+    return {
+        "issuer": JWT_ISSUER,
+        "audience": JWT_AUDIENCE,
+    }
+
+
 async def require_auth(authorization: str = Header(...)) -> AuthContext:
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -36,8 +49,7 @@ async def require_auth(authorization: str = Header(...)) -> AuthContext:
             token,
             signing_key.key,
             algorithms=["RS256"],
-            audience=JWT_AUDIENCE,
-            issuer=JWT_ISSUER,
+            **_decode_kwargs(),
         )
         return AuthContext(
             user_id=payload["sub"],

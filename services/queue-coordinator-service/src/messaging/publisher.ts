@@ -44,3 +44,13 @@ export function publishApproachingWithTtl(payload: object): void {
         { contentType: "application/json", persistent: true },
     );
 }
+
+export function publishEvent(routingKey: string, payload: object): void {
+    if (!channel) return;
+    channel.publish(
+        EXCHANGE,
+        routingKey,
+        Buffer.from(JSON.stringify(payload)),
+        { contentType: "application/json", persistent: true },
+    );
+}

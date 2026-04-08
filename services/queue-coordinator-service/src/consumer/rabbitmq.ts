@@ -2,7 +2,7 @@ import amqp from "amqplib";
 import { AppointmentInfo } from "../model/Queue";
 import * as QueueService from "../service/Queue";
 import { broadcastQueueUpdate, broadcastAllPatientPositions } from "../ws/manager";
-import { initPublisher } from "../messaging/publisher";
+import { initPublisher, publishEvent } from "../messaging/publisher";
 
 const EXCHANGE = "clinic.events";
 const QUEUE_NAME = "queue-coordinator.appointment-events";
@@ -141,6 +141,11 @@ async function setupConsumer(url: string): Promise<void> {
                     if (entry) {
                         broadcastQueueUpdate(entry.appointment_id, entry);
                         broadcastAllPatientPositions().catch(() => {});
+                        publishEvent("queue.removed", {
+                            appointment_id: entry.appointment_id,
+                            patient_id: entry.patient_id,
+                            reason: "checkin_timeout",
+                        });
                         console.log(`[Queue] Auto-removed no-show ${content.appointment_id} after check-in timeout`);
                     } else {
                         console.log(`[Queue] checkin_timeout for ${content.appointment_id} — already checked in, ignoring`);
