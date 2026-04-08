@@ -710,6 +710,12 @@ STRIPE_API_KEY=sk_test_...           # optional
 STRIPE_WEBHOOK_SIGNING_SECRET=whsec_... # optional (get from `stripe listen`)
 ```
 
+**`infra/env/activity-log.env`** — Set `ACTIVITY_LOG_URL` to point at your own OutSystems REST endpoint. The default value points at the original developer's personal OutSystems cloud, which may not be accessible:
+```
+ACTIVITY_LOG_URL=https://<your-outsystems-env>.outsystemscloud.com/<your-app>/rest/ActivityLogAPI/logs
+```
+The service POSTs every clinic event to this URL and GETs logs from it. If you do not have an OutSystems environment, events will be logged to the console as errors but will not break any other service — the failure is caught and swallowed by the RabbitMQ consumer.
+
 **`infra/env/patient.env`** — The `AWS_*` and `S3_BUCKET` variables are used for file uploads to S3. Without them, file uploads in medical records will fail, but all other patient features will continue to work:
 ```
 AWS_REGION=ap-southeast-1            # optional
