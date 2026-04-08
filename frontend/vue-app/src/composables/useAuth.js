@@ -3,8 +3,9 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 // ─── Auth mode: "betterauth" (local dev) or "cognito" (production) ──────────
+import { API_BASE } from '@/utils/env'
+
 const AUTH_MODE = import.meta.env.VITE_AUTH_MODE ?? 'betterauth'
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
 // ─── Cognito helpers (production only) ──────────────────────────────────────
 const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID ?? ''

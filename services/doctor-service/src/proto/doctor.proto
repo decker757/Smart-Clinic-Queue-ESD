@@ -18,6 +18,7 @@ message GetDoctorRequest {
 
 message GetDoctorSlotsRequest {
   string doctor_id = 1;
+  string date = 2;
 }
 
 message UpdateSlotStatusRequest {

@@ -1,7 +1,7 @@
 import { useAuthStore } from '@/stores/auth'
 import { apiError } from '@/utils/api'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API_BASE } from '@/utils/env'
 
 function authHeaders(jwt) {
   return { Authorization: `Bearer ${jwt}` }
@@ -37,6 +37,15 @@ export function useDoctor() {
       { headers: authHeaders(authStore.jwt) },
     )
     if (!res.ok) throw new Error('Failed to fetch slots')
+    return res.json()
+  }
+
+  async function fetchDoctorAppointments(doctorId) {
+    const res = await fetch(
+      `${API_BASE}/api/composite/appointments?doctor_id=${doctorId}`,
+      { headers: authHeaders(authStore.jwt) },
+    )
+    if (!res.ok) throw new Error('Failed to fetch appointments')
     return res.json()
   }
 
@@ -104,13 +113,24 @@ export function useDoctor() {
     return res.json()
   }
 
+  async function fetchPatientRecords(patientId) {
+    const res = await fetch(
+      `${API_BASE}/api/composite/staff/patients/${patientId}/records`,
+      { headers: authHeaders(authStore.jwt) },
+    )
+    if (!res.ok) return []
+    return res.json()
+  }
+
   return {
     fetchDoctorInfo,
     fetchDoctorSlots,
+    fetchDoctorAppointments,
     fetchCurrentPatient,
     callNextPatient,
     completeConsultation,
     fetchPatient,
     fetchPatientHistory,
+    fetchPatientRecords,
   }
 }

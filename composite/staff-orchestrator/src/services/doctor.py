@@ -26,11 +26,11 @@ async def get_doctor(doctor_id: str):
         )
 
 
-async def get_doctor_slots(doctor_id: str):
+async def get_doctor_slots(doctor_id: str, date: str = ""):
     async with _channel() as channel:
         stub = doctor_pb2_grpc.DoctorServiceStub(channel)
         response = await stub.GetDoctorSlots(
-            doctor_pb2.GetDoctorSlotsRequest(doctor_id=doctor_id),
+            doctor_pb2.GetDoctorSlotsRequest(doctor_id=doctor_id, date=date),
             timeout=10,
         )
         return response.slots

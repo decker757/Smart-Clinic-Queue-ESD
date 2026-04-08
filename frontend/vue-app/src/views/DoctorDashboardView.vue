@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { API_BASE } from '@/utils/env'
 import { useAuthStore } from '@/stores/auth'
 import { useAuth } from '@/composables/useAuth'
 import { useDoctor } from '@/composables/useDoctor'
@@ -11,12 +12,13 @@ const authStore = useAuthStore()
 const { signOut } = useAuth()
 const {
   fetchDoctorInfo,
-  fetchDoctorSlots,
+  fetchDoctorAppointments,
   fetchCurrentPatient,
   callNextPatient,
   completeConsultation,
   fetchPatient,
   fetchPatientHistory,
+  fetchPatientRecords,
 } = useDoctor()
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -33,6 +35,7 @@ const slots = ref([])
 const currentPatient = ref(null)
 const patientProfile = ref(null)
 const patientHistory = ref([])
+const patientRecords = ref([])
 const showPatientModal = ref(false)
 
 // ─── Consultation form ────────────────────────────────────────────────────────
@@ -64,13 +67,12 @@ const firstName = computed(() => {
   return name.split(' ')[0] || 'Doctor'
 })
 
-const todaySlots = computed(() => {
-  const today = new Date().toDateString()
-  return slots.value.filter((s) => {
-    if (!s.start_time) return true
-    return new Date(s.start_time).toDateString() === today
-  })
-})
+const upcomingAppointments = computed(() =>
+  slots.value
+    .filter((a) => ['scheduled', 'checked_in', 'in_progress'].includes(a.status))
+    .sort((a, b) => new Date(a.start_time ?? 0) - new Date(b.start_time ?? 0))
+)
+
 
 const SLOT_STATUS_BADGE = {
   available: { label: 'Available', classes: 'bg-emerald-100 text-emerald-700' },
@@ -87,8 +89,8 @@ function slotStatusBadge(status) {
 async function loadSlots() {
   const doctorId = authStore.user?.id
   if (!doctorId) return
-  const slotsData = await fetchDoctorSlots(doctorId)
-  slots.value = slotsData ?? []
+  const data = await fetchDoctorAppointments(doctorId)
+  slots.value = Array.isArray(data) ? data : []
 }
 
 async function loadDashboard() {
@@ -96,14 +98,14 @@ async function loadDashboard() {
     const doctorId = authStore.user?.id
     if (!doctorId) return
 
-    const [doctorData, slotsData, calledPatient] = await Promise.all([
+    const [doctorData, apptData, calledPatient] = await Promise.all([
       fetchDoctorInfo(doctorId),
-      fetchDoctorSlots(doctorId),
+      fetchDoctorAppointments(doctorId),
       fetchCurrentPatient(doctorId),
     ])
 
     doctor.value = doctorData
-    slots.value = slotsData ?? []
+    slots.value = Array.isArray(apptData) ? apptData : []
     if (calledPatient && !currentPatient.value) {
       currentPatient.value = calledPatient
     }
@@ -170,24 +172,53 @@ async function handleComplete() {
   }
 }
 
-async function handleViewPatient() {
-  if (!currentPatient.value?.patient_id) return
+async function openPatientModal(patientId) {
+  if (!patientId) return
   showPatientModal.value = true
   patientLoading.value = true
   patientProfile.value = null
   patientHistory.value = []
+  patientRecords.value = []
   try {
-    const [profile, history] = await Promise.all([
-      fetchPatient(currentPatient.value.patient_id),
-      fetchPatientHistory(currentPatient.value.patient_id),
+    const [profile, history, records] = await Promise.all([
+      fetchPatient(patientId),
+      fetchPatientHistory(patientId),
+      fetchPatientRecords(patientId),
     ])
     patientProfile.value = profile
     patientHistory.value = history ?? []
+    patientRecords.value = records ?? []
   } catch {
     actionError.value = 'Failed to load patient details'
     showPatientModal.value = false
   } finally {
     patientLoading.value = false
+  }
+}
+
+async function handleViewPatient() {
+  openPatientModal(currentPatient.value?.patient_id)
+}
+
+async function openRecordFile(fileUrl) {
+  if (!fileUrl) return
+  const url = fileUrl.startsWith('http') ? fileUrl : `${API_BASE}${fileUrl}`
+  // S3 presigned URL — open directly
+  if (fileUrl.startsWith('http')) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  // Local Docker — needs auth headers, fetch then blob
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${authStore.jwt}` } })
+    if (!res.ok) throw new Error('Could not open file')
+    const blob = await res.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer')
+    if (opened) setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+    else URL.revokeObjectURL(objectUrl)
+  } catch {
+    actionError.value = 'Could not open file'
   }
 }
 
@@ -321,10 +352,10 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <!-- ─── Today's Schedule ───────────────────────────────────────── -->
+      <!-- ─── Upcoming Appointments ──────────────────────────────────── -->
       <section aria-labelledby="slots-heading">
         <h2 id="slots-heading" class="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
-          Today's Schedule
+          Upcoming Appointments
         </h2>
 
         <!-- Loading skeleton -->
@@ -337,38 +368,44 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- No slots -->
+        <!-- No appointments -->
         <div
-          v-else-if="todaySlots.length === 0"
+          v-else-if="upcomingAppointments.length === 0"
           class="bg-white rounded-2xl border border-slate-200 p-8 text-center"
         >
-          <p class="font-heading font-semibold text-text text-base">No slots today</p>
-          <p class="text-slate-500 text-sm mt-1">Your schedule is clear for today.</p>
+          <p class="font-heading font-semibold text-text text-base">No upcoming appointments</p>
+          <p class="text-slate-500 text-sm mt-1">Your schedule is clear.</p>
         </div>
 
-        <!-- Slots list -->
+        <!-- Appointments list -->
         <div v-else class="space-y-3">
-          <div
-            v-for="slot in todaySlots"
-            :key="slot.id"
-            class="bg-white rounded-2xl border border-slate-200 px-5 py-4 flex items-center justify-between gap-3"
+          <button
+            v-for="appt in upcomingAppointments"
+            :key="appt.id"
+            type="button"
+            class="w-full bg-white rounded-2xl border border-slate-200 px-5 py-4 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors cursor-pointer text-left"
+            @click="openPatientModal(appt.patient_id)"
           >
-            <p class="font-semibold text-sm text-text">
-              {{ slot.start_time
-                ? new Date(slot.start_time).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })
-                : '—' }}
-              <span class="text-slate-400 font-normal mx-1">—</span>
-              {{ slot.end_time
-                ? new Date(slot.end_time).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })
-                : '—' }}
-            </p>
-            <span
-              class="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full"
-              :class="slotStatusBadge(slot.status).classes"
-            >
-              {{ slotStatusBadge(slot.status).label }}
+            <div>
+              <p class="font-semibold text-sm text-text">
+                {{ appt.start_time
+                  ? new Date(appt.start_time).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })
+                  : (appt.session === 'afternoon' ? 'Afternoon' : 'Morning') }}
+                <span v-if="appt.start_time" class="text-slate-400 font-normal mx-1">–</span>
+                {{ appt.start_time
+                  ? new Date(new Date(appt.start_time).getTime() + 15*60000).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })
+                  : '' }}
+              </p>
+              <p class="text-xs text-slate-400 mt-0.5">
+                {{ appt.start_time
+                  ? new Date(appt.start_time).toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' })
+                  : 'Session booking' }}
+              </p>
+            </div>
+            <span class="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+              Booked
             </span>
-          </div>
+          </button>
         </div>
       </section>
 
@@ -465,6 +502,44 @@ onUnmounted(() => {
                   </span>
                 </div>
                 <p v-if="entry.notes" class="text-xs text-slate-500 mt-1">{{ entry.notes }}</p>
+              </div>
+            </div>
+
+            <!-- Medical Records -->
+            <h4 class="text-xs font-semibold uppercase tracking-widest text-slate-400 mt-5 mb-3">
+              Medical Records
+            </h4>
+
+            <div v-if="patientRecords.length === 0" class="text-sm text-slate-400 text-center py-4">
+              No records uploaded.
+            </div>
+
+            <div v-else class="space-y-3">
+              <div
+                v-for="rec in patientRecords"
+                :key="rec.id"
+                class="border border-slate-100 rounded-xl px-4 py-3"
+              >
+                <div class="flex items-start justify-between gap-2">
+                  <p class="font-semibold text-sm text-text">{{ rec.title }}</p>
+                  <span class="text-xs text-slate-400 shrink-0">
+                    {{ rec.created_at
+                      ? new Date(rec.created_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '—' }}
+                  </span>
+                </div>
+                <p v-if="rec.content" class="text-xs text-slate-500 mt-1">{{ rec.content }}</p>
+                <button
+                  v-if="rec.file_url"
+                  type="button"
+                  class="inline-flex items-center gap-1 text-xs text-primary font-medium mt-2 hover:underline cursor-pointer"
+                  @click="openRecordFile(rec.file_url)"
+                >
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                  View file
+                </button>
               </div>
             </div>
           </div>

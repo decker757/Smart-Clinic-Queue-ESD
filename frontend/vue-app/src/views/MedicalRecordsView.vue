@@ -7,7 +7,7 @@ import { apiError } from '@/utils/api'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API_BASE } from '@/utils/env'
 
 // ─── State ───────────────────────────────────────────────────────────────────
 const memos = ref([])

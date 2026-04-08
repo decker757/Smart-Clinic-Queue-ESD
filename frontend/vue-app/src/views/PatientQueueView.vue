@@ -9,7 +9,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const { connectQueueWebSocket } = useAppointment()
 
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API_BASE as API } from '@/utils/env'
 
 // ── State ──
 const queuePosition = ref(null) // { queue_number, estimated_time, status }

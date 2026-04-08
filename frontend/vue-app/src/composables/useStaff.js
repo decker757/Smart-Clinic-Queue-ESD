@@ -1,7 +1,7 @@
 import { useAuthStore } from '@/stores/auth'
 import { apiError } from '@/utils/api'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API_BASE } from '@/utils/env'
 
 function authHeaders(jwt) {
   return { Authorization: `Bearer ${jwt}` }

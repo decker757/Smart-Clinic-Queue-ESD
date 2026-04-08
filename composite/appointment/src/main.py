@@ -40,6 +40,7 @@ async def unified_error_envelope(request: Request, exc: HTTPException):
 class AuthContext:
     token: str    # raw JWT — forwarded to atomic services
     user_id: str  # JWT sub claim — used for ownership checks
+    role: str     # role claim
 
 
 async def require_auth(authorization: str = Header(...)) -> AuthContext:
@@ -48,7 +49,11 @@ async def require_auth(authorization: str = Header(...)) -> AuthContext:
     payload = await auth.verify_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return AuthContext(token=token, user_id=payload["sub"])
+    return AuthContext(
+        token=token,
+        user_id=payload["sub"],
+        role=payload.get("custom:role", payload.get("role", "")),
+    )
 
 
 # ─── RabbitMQ helper ──────────────────────────────────────────────────────────
@@ -108,9 +113,16 @@ async def health():
 
 @app.get("/api/composite/appointments", response_model=List[AppointmentResponse])
 async def list_appointments(
-    patient_id: str = Query(..., description="Filter by patient ID"),
+    patient_id: Optional[str] = Query(None, description="Filter by patient ID"),
+    doctor_id: Optional[str] = Query(None, description="Filter by doctor ID (doctor/staff only)"),
     auth_ctx: AuthContext = Depends(require_auth),
 ):
+    if doctor_id:
+        if auth_ctx.role not in ("doctor", "staff", "admin"):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return await appointment_service.list_appointments_by_doctor(doctor_id, auth_ctx.token)
+    if not patient_id:
+        raise HTTPException(status_code=400, detail="patient_id or doctor_id is required")
     if patient_id != auth_ctx.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     return await appointment_service.list_appointments(patient_id, auth_ctx.token)

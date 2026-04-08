@@ -30,3 +30,13 @@ async def get_patient_history(patient_id: str):
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Patient not found")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+async def get_patient_memos(patient_id: str):
+    try:
+        memos = await patient_service.get_memos(patient_id)
+        return [_msg(m) for m in memos]
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.NOT_FOUND:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(status_code=500, detail="Internal server error")

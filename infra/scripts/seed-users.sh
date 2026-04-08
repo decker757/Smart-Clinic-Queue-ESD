@@ -276,6 +276,32 @@ echo "  email:    $PATIENT3_EMAIL"
 echo "  password: $PATIENT3_PASSWORD"
 echo "  user_id:  $PATIENT3_ID"
 
+# ── Time Slots ───────────────────────────────────────────────────────────────
+echo ""
+echo "━━━ Time Slots ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+SLOT_COUNT=$(db_exec "
+INSERT INTO doctors.time_slots (doctor_id, start_time, end_time, status)
+SELECT
+  d.id,
+  gs,
+  gs + interval '15 minutes',
+  'available'
+FROM doctors.doctors d,
+generate_series(
+  date_trunc('day', NOW()),
+  date_trunc('day', NOW()) + interval '31 days',
+  interval '15 minutes'
+) AS gs
+WHERE
+  EXTRACT(DOW FROM gs AT TIME ZONE 'Asia/Singapore') <> 0
+  AND EXTRACT(HOUR FROM gs AT TIME ZONE 'Asia/Singapore') IN (9,10,11,14,15,16)
+  AND gs > NOW()
+ON CONFLICT (doctor_id, start_time) DO NOTHING;
+SELECT COUNT(*) FROM doctors.time_slots WHERE status = 'available';
+")
+pass "Generated 30-day slots for all doctors (total available: $SLOT_COUNT)"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"

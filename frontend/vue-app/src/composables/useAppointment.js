@@ -1,8 +1,7 @@
 import { useAuthStore } from '@/stores/auth'
 import { apiError } from '@/utils/api'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
-const WS_BASE  = import.meta.env.VITE_WS_BASE_URL  ?? API_BASE
+import { API_BASE, WS_BASE } from '@/utils/env'
 
 // Active appointment statuses — completed/cancelled/no_show are ignored.
 const ACTIVE_STATUSES = new Set(['scheduled', 'checked_in', 'in_progress'])
@@ -50,17 +49,12 @@ function formatAppointmentDate(appt) {
   })
 }
 
-// Derive the WS base URL from the HTTP API base
-// e.g. https://kong.railway.app → wss://kong.railway.app
-//      http://localhost:8000    → ws://localhost:8000
-//      '' (same origin)         → ws://<current host>
 export function wsBase() {
-  const base = WS_BASE || API_BASE
-  if (!base) {
+  if (!WS_BASE) {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     return `${proto}://${location.host}`
   }
-  return base.replace(/^https/, 'wss').replace(/^http/, 'ws')
+  return WS_BASE
 }
 
 /**

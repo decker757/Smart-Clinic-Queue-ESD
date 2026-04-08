@@ -46,6 +46,7 @@ export const auth = betterAuth({
                 expirationTime: "1h",
                 definePayload: async ({ user }) => ({
                     role: (user as any).role ?? "patient",
+                    name: user.name,
                 }),
             },
         }),

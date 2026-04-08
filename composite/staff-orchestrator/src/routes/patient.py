@@ -14,3 +14,8 @@ async def get_patient(patient_id: str, auth: AuthContext = Depends(require_staff
 @router.get("/{patient_id}/history")
 async def get_patient_history(patient_id: str, auth: AuthContext = Depends(require_staff)):
     return await patient_controller.get_patient_history(patient_id)
+
+
+@router.get("/{patient_id}/records")
+async def get_patient_records(patient_id: str, auth: AuthContext = Depends(require_staff)):
+    return await patient_controller.get_patient_memos(patient_id)

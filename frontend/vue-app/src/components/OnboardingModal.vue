@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const emit = defineEmits(['complete'])
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API_BASE } from '@/utils/env'
 const authStore = useAuthStore()
 
 const step = ref(1)

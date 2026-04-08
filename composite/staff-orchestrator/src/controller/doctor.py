@@ -26,9 +26,9 @@ async def get_doctor(doctor_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def get_doctor_slots(doctor_id: str):
+async def get_doctor_slots(doctor_id: str, date: str = ""):
     try:
-        slots = await doctor_service.get_doctor_slots(doctor_id)
+        slots = await doctor_service.get_doctor_slots(doctor_id, date)
         return [_msg(s) for s in slots]
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:

@@ -50,7 +50,7 @@ const handlers = {
 
     GetDoctorSlots: async (call: any, callback: any) => {
         try {
-            const slots = await DoctorService.getDoctorSlots(call.request.doctor_id);
+            const slots = await DoctorService.getDoctorSlots(call.request.doctor_id, call.request.date || undefined);
             callback(null, { slots: slots.map(formatSlot) });
         } catch (e: any) {
             callback({ code: grpc.status.INTERNAL, message: e.message });
