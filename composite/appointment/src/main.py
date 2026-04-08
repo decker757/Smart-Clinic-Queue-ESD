@@ -159,13 +159,14 @@ async def create_appointment(
         # for a slot that is then rejected with 409.
         try:
             await appointment_service.mark_slot_booked(body.slot_id, auth_ctx.token)
-        except HTTPException as e:
-            if e.status_code == 409:
-                # Slot was taken by a concurrent booking — roll back appointment record.
-                try:
-                    await appointment_service.cancel_appointment(appt.id, auth_ctx.token)
-                except Exception:
-                    pass
+        except Exception as e:
+            # Roll back the appointment for any slot-claim failure (409 conflict,
+            # 5xx, timeout) so we never leave an orphaned appointment row.
+            try:
+                await appointment_service.cancel_appointment(appt.id, auth_ctx.token)
+            except Exception:
+                pass
+            if isinstance(e, HTTPException) and e.status_code == 409:
                 raise HTTPException(status_code=409, detail="This time slot was just booked by someone else. Please choose another.")
             raise
 

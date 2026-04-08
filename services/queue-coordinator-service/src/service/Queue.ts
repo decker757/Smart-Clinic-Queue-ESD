@@ -274,11 +274,11 @@ export async function deprioritize(appointment_id: string, travel_eta_minutes: n
                 UPDATE queue.queue_entries
                 SET status = 'checked_in',
                     sort_key = $2,
-                    estimated_arrival_at = NOW(),
+                    estimated_arrival_at = NOW() + ($3 * INTERVAL '1 minute'),
                     updated_at = NOW()
                 WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
                 RETURNING *
-            `, [appointment_id, newSortKey]);
+            `, [appointment_id, newSortKey, travel_eta_minutes]);
             updated = rows[0];
         } else {
             // ── Specific booking patient: defer tier-0 until arrival ────────────
@@ -357,10 +357,11 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
                       AND (qe.estimated_arrival_at IS NULL OR qe.estimated_arrival_at <= NOW())
                     THEN 0
 
-                    -- Tier 1: generic patient — but only if the current 15-min slot has no
+                    -- Tier 1: generic patient — arrived AND the current 15-min slot has no
                     -- checked-in specific booking waiting to be seen.
                     -- If doctor_id is NULL (session-based call) skip the slot-protection check.
                     WHEN qe.doctor_id IS NULL
+                      AND (qe.estimated_arrival_at IS NULL OR qe.estimated_arrival_at <= NOW())
                       AND (
                         $2::text IS NULL
                         OR NOT EXISTS (

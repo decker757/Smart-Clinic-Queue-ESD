@@ -58,3 +58,4 @@ class AppointmentResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    warning: str | None = None  # set when event-bus publish fails at booking time
