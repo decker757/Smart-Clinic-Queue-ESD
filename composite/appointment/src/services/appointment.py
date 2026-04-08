@@ -38,7 +38,7 @@ async def _call(
 async def list_appointments_by_doctor(doctor_id: str, token: str) -> list[AppointmentResponse]:
     """List all appointments for a doctor from atomic appointment-service."""
     response = await _call("get", "/appointments", token, params={"doctor_id": doctor_id})
-    return [AppointmentResponse(**a) for a in response.json()]
+    return [AppointmentResponse(**a) for a in response.json() or []]
 
 
 async def list_appointments(patient_id: str, token: str) -> list[AppointmentResponse]:
