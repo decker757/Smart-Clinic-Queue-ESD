@@ -14,10 +14,16 @@ def _forward_error(e: httpx.HTTPStatusError) -> NoReturn:
     raise HTTPException(status_code=e.response.status_code, detail=detail)
 
 
-async def _call(method: Literal["get", "post", "put", "patch", "delete"], path: str, token: str, **kwargs) -> httpx.Response:
-    """Single entry-point for all calls to the atomic appointment-service."""
+async def _call(
+    method: Literal["get", "post", "put", "patch", "delete"],
+    path: str,
+    token: str,
+    base_url: str | None = None,
+    **kwargs,
+) -> httpx.Response:
+    """Single entry-point for all HTTP calls to atomic services."""
     async with httpx.AsyncClient(
-        base_url=settings.APPOINTMENT_SERVICE_URL,
+        base_url=base_url or settings.APPOINTMENT_SERVICE_URL,
         headers={"Authorization": f"Bearer {token}"},
         timeout=10.0,
     ) as client:
@@ -51,3 +57,20 @@ async def cancel_appointment(appointment_id: str, token: str) -> AppointmentResp
     """Cancel an appointment via atomic appointment-service."""
     response = await _call("delete", f"/appointments/{appointment_id}", token)
     return AppointmentResponse(**response.json())
+
+
+async def mark_slot_booked(slot_id: str, token: str) -> None:
+    """Mark a time slot as booked via doctor-service."""
+    await _call("patch", f"/api/doctors/slots/{slot_id}", token,
+                base_url=settings.DOCTOR_SERVICE_URL, json={"status": "booked"})
+
+
+async def release_slot(doctor_id: str, start_time: str, token: str) -> None:
+    """Release the time slot matching a cancelled specific-doctor appointment.
+
+    Finds the slot by doctor_id + start_time and marks it available again.
+    Failures are logged but do not block the cancellation.
+    """
+    await _call("patch", f"/api/doctors/slots/release", token,
+                base_url=settings.DOCTOR_SERVICE_URL,
+                json={"doctor_id": doctor_id, "start_time": start_time})

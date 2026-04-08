@@ -23,6 +23,7 @@ async function loadDashboard() {
   try {
     appointment.value = await fetchDashboardData()
     fetchError.value = ''
+    await checkPendingPayments()
   } catch {
     fetchError.value = 'Could not load your appointment. Please refresh.'
   } finally {
@@ -60,6 +61,36 @@ const FALLBACK_POLL_MS = 60_000
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
+// ─── Pending payment check ──────────────────────────────────────────────────
+const pendingPayment = ref(null)
+
+async function checkPendingPayments() {
+  const pid = authStore.user?.id
+  if (!pid) return
+  try {
+    const res = await fetch(`${API_BASE}/api/composite/patients/${pid}/payments`, {
+      headers: { Authorization: `Bearer ${authStore.jwt}` },
+    })
+    if (res.ok) {
+      const all = (await res.json()) ?? []
+      // Sort newest-first and check only the latest record — earlier 'pending'
+      // rows are stale history from before a successful payment was made.
+      const sorted = [...all].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      // Only show pending banner if no payment has been completed yet.
+      // A stale 'pending' row must not reappear after a newer 'paid' row exists.
+      const hasPaid = all.some(p => p.status === 'paid' || p.status === 'completed')
+      pendingPayment.value = hasPaid ? null : (sorted.find(p => p.status === 'pending') ?? null)
+    }
+  } catch {
+    // non-critical
+  }
+}
+
+async function openPayment() {
+  if (!pendingPayment.value?.payment_link) return
+  window.open(pendingPayment.value.payment_link, '_blank', 'noopener,noreferrer')
+}
+
 async function checkProfile() {
   const pid = authStore.user?.id
   if (!pid) return
@@ -80,6 +111,7 @@ async function checkProfile() {
 onMounted(() => {
   checkProfile()
   loadDashboard()
+  checkPendingPayments()
   fallbackTimer = setInterval(loadDashboard, FALLBACK_POLL_MS)
 })
 
@@ -121,6 +153,7 @@ const modalLoading = ref(false)
 const modalError = ref('')
 const showCancelModal = ref(false)
 const cancellingAppt = ref(false)
+const lateEtaMinutes = ref(null)
 
 async function confirmCancelAppointment() {
   if (!appointment.value) return
@@ -155,6 +188,7 @@ function closeModals() {
   showLateModal.value = false
   modalLoading.value = false
   modalError.value = ''
+  lateEtaMinutes.value = null
 }
 
 function getAppointmentTime(appt) {
@@ -191,6 +225,7 @@ async function handleOnMyWayConfirm() {
       patientLocation,
     })
     if (result.status === 'late') {
+      lateEtaMinutes.value = result.eta_minutes ?? null
       showOnMyWayModal.value = false
       showLateModal.value = true
     } else {
@@ -211,7 +246,12 @@ async function handleLateConfirm(isComing) {
   modalLoading.value = true
   modalError.value = ''
   try {
-    await confirmCheckIn({ patientId: authStore.user.id, appointmentId: appointment.value.id, isComing })
+    await confirmCheckIn({
+      patientId: authStore.user.id,
+      appointmentId: appointment.value.id,
+      isComing,
+      etaMinutes: lateEtaMinutes.value,
+    })
     closeModals()
     if (!isComing) {
       // Patient cancelled — remove appointment from view
@@ -447,6 +487,21 @@ async function handleLateConfirm(isComing) {
             </button>
           </div>
         </div>
+      </section>
+
+      <!-- ─── Pending Payment Banner ────────────────────────────────────── -->
+      <section v-if="pendingPayment" class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <p class="font-semibold text-sm text-amber-800">Payment Pending</p>
+          <p class="text-xs text-amber-600 mt-0.5">You have an outstanding consultation fee to pay.</p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 px-4 py-2 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition-colors duration-150 cursor-pointer"
+          @click="openPayment"
+        >
+          Pay Now
+        </button>
       </section>
 
       <!-- ─── Quick Actions ──────────────────────────────────────────────── -->

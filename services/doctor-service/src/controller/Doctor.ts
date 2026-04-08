@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import * as DoctorService from "../service/Doctor";
+import { requireAuth, requireStaff } from "../middleware/auth";
 
 const router = Router();
 
@@ -27,12 +28,48 @@ router.get("/:id", async (req: Request, res: Response) => {
     }
 });
 
-// GET /api/doctors/:id/slots — get available slots (used in Scenario 1, step 5b)
+// GET /api/doctors/:id/slots?date=YYYY-MM-DD — get available slots filtered by date
 router.get("/:id/slots", async (req: Request, res: Response) => {
     try {
-        const slots = await DoctorService.getDoctorSlots(req.params.id as string);
+        const date = req.query.date as string | undefined;
+        const slots = await DoctorService.getDoctorSlots(req.params.id as string, date);
         res.json(slots);
     } catch (e) {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// POST /api/doctors/:id/slots/generate — generate 15-min slots over a date range (staff only)
+router.post("/:id/slots/generate", requireAuth, requireStaff, async (req: Request, res: Response) => {
+    try {
+        const { start_date, end_date } = req.body;
+        if (!start_date || !end_date) {
+            res.status(400).json({ error: "start_date and end_date are required (YYYY-MM-DD)" });
+            return;
+        }
+        const result = await DoctorService.generateSlots(req.params.id as string, start_date, end_date);
+        res.status(201).json(result);
+    } catch (e) {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// PATCH /api/doctors/slots/release — release a slot by doctor_id + start_time (called on cancellation)
+// Must be registered BEFORE /slots/:slot_id so Express doesn't match "release" as a slot_id.
+router.patch("/slots/release", async (req: Request, res: Response) => {
+    try {
+        const { doctor_id, start_time } = req.body;
+        if (!doctor_id || !start_time) {
+            res.status(400).json({ error: "doctor_id and start_time are required" });
+            return;
+        }
+        const slot = await DoctorService.releaseSlotByTime(doctor_id, start_time);
+        if (!slot) {
+            res.json({ message: "No booked slot found to release" });
+            return;
+        }
+        res.json(slot);
+    } catch {
         res.status(500).json({ error: "Internal server error" });
     }
 });
@@ -51,6 +88,8 @@ router.patch("/slots/:slot_id", async (req: Request, res: Response) => {
     } catch (e: any) {
         if (e.message === "Slot not found") {
             res.status(404).json({ error: e.message });
+        } else if (e.message === "Slot already booked") {
+            res.status(409).json({ error: e.message });
         } else {
             res.status(500).json({ error: "Internal server error" });
         }

@@ -22,7 +22,6 @@ BASE_REQUEST = {
 }
 
 HEADERS = {"Authorization": f"Bearer {VALID_TOKEN}"}
-PAYMENT_LINK = "https://checkout.stripe.com/pay/test-session"
 
 
 class MockRpcError(grpc.RpcError):
@@ -93,7 +92,11 @@ def mock_payment():
         "src.controller.consultation.payment_svc.create_payment_request",
         new_callable=AsyncMock,
     ) as m:
-        m.return_value = PAYMENT_LINK
+        m.return_value = {
+            "payment_link": "https://checkout.stripe.com/pay/test-link",
+            "amount_cents": 5000,
+            "currency": "sgd",
+        }
         yield m
 
 
@@ -142,28 +145,25 @@ async def test_happy_path(mocks):
     body = res.json()
     assert body["status"] == "completed"
     assert body["appointment_id"] == "appt-1"
-    assert body["payment_link"] == PAYMENT_LINK
+    assert body["payment_link"] == "https://checkout.stripe.com/pay/test-link"
 
     # MC + prescription both created
     assert mocks["patient_create"].call_count == 2
     mocks["appointment"].assert_called_once_with("appt-1", VALID_TOKEN)
-    mocks["payment"].assert_called_once_with(
-        appointment_id="appt-1", patient_id="patient-1"
-    )
+    mocks["payment"].assert_called_once_with(appointment_id="appt-1", token=VALID_TOKEN)
     mocks["publish"].assert_called_once()
     event = mocks["publish"].call_args[0][1]
-    assert event["payment_link"] == PAYMENT_LINK
     assert event["mc_issued"] is True
     assert event["diagnosis"] == "Common cold"
+    assert event["payment_link"] == "https://checkout.stripe.com/pay/test-link"
 
 
-async def test_payment_link_in_rabbitmq_event(mocks):
-    """Payment link obtained synchronously must be included in the event."""
+async def test_consultation_event_includes_payment_link(mocks):
     res = await post()
 
     assert res.status_code == 200
     event = mocks["publish"].call_args[0][1]
-    assert event["payment_link"] == PAYMENT_LINK
+    assert event["payment_link"] == "https://checkout.stripe.com/pay/test-link"
 
 
 async def test_no_mc_skips_mc_record(mocks):
@@ -221,14 +221,12 @@ async def test_appointment_failure_returns_500(mocks):
     mocks["publish"].assert_not_called()
 
 
-async def test_payment_failure_returns_500(mocks):
-    """Payment service failure aborts with 500 — payment is a critical step."""
-    mocks["payment"].side_effect = MockRpcError()
+async def test_payment_failure_returns_error(mocks):
+    mocks["payment"].side_effect = HTTPException(status_code=502, detail="payment-service unavailable")
 
     res = await post()
 
-    assert res.status_code == 500
-    assert "payment" in res.json()["detail"].lower()
+    assert res.status_code == 502
     mocks["publish"].assert_not_called()
 
 
@@ -240,7 +238,6 @@ async def test_doctor_notes_failure_is_non_critical(mocks):
 
     assert res.status_code == 200
     mocks["appointment"].assert_called_once()
-    mocks["payment"].assert_called_once()
     mocks["publish"].assert_called_once()
 
 
@@ -252,7 +249,6 @@ async def test_diagnosis_history_failure_is_non_critical(mocks):
 
     assert res.status_code == 200
     mocks["appointment"].assert_called_once()
-    mocks["payment"].assert_called_once()
     mocks["publish"].assert_called_once()
 
 

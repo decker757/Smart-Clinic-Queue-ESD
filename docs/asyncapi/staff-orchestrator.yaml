@@ -1,0 +1,162 @@
+asyncapi: 2.6.0
+
+info:
+  title: Staff Management Orchestrator — AMQP API
+  version: 1.0.0
+  description: |
+    Publishes staff action events to the `clinic.events` exchange. All events
+    are for activity logging and audit trail purposes — consumed by the
+    activity-log-service.
+
+servers:
+  production:
+    url: '{RABBITMQ_URL}'
+    protocol: amqp
+    description: CloudAMQP hosted broker
+
+channels:
+  staff.patient_checked_in:
+    description: Staff manually checked a patient into the queue.
+    publish:
+      operationId: onStaffPatientCheckedIn
+      message:
+        $ref: '#/components/messages/AppointmentEvent'
+
+  staff.patient_added_to_queue:
+    description: Staff added a patient to the queue.
+    publish:
+      operationId: onStaffPatientAddedToQueue
+      message:
+        $ref: '#/components/messages/AppointmentEvent'
+
+  staff.patient_removed_from_queue:
+    description: Staff removed a patient from the queue.
+    publish:
+      operationId: onStaffPatientRemovedFromQueue
+      message:
+        $ref: '#/components/messages/AppointmentEvent'
+
+  staff.patient_no_show:
+    description: Staff marked a patient as no-show.
+    publish:
+      operationId: onStaffPatientNoShow
+      message:
+        $ref: '#/components/messages/AppointmentEvent'
+
+  staff.appointment_completed:
+    description: Staff marked an appointment as completed.
+    publish:
+      operationId: onStaffAppointmentCompleted
+      message:
+        $ref: '#/components/messages/AppointmentEvent'
+
+  staff.patient_deprioritized:
+    description: Staff moved a patient to the back of the queue.
+    publish:
+      operationId: onStaffPatientDeprioritized
+      message:
+        $ref: '#/components/messages/SimpleAppointmentEvent'
+
+  staff.next_patient_called:
+    description: Staff called the next patient.
+    publish:
+      operationId: onStaffNextPatientCalled
+      message:
+        $ref: '#/components/messages/CallNextEvent'
+
+  staff.patient_profile_viewed:
+    description: Staff viewed a patient's profile (audit trail).
+    publish:
+      operationId: onStaffPatientProfileViewed
+      message:
+        $ref: '#/components/messages/PatientViewEvent'
+
+  staff.slot_updated:
+    description: Staff updated a doctor's time slot status.
+    publish:
+      operationId: onStaffSlotUpdated
+      message:
+        $ref: '#/components/messages/SlotEvent'
+
+  staff.consultation_notes_added:
+    description: Staff added consultation notes for an appointment.
+    publish:
+      operationId: onStaffConsultationNotesAdded
+      message:
+        $ref: '#/components/messages/NotesEvent'
+
+components:
+  messages:
+    AppointmentEvent:
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, patient_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          patient_id:
+            type: string
+
+    SimpleAppointmentEvent:
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+
+    CallNextEvent:
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          patient_id:
+            type: string
+          session:
+            type: string
+            enum: [morning, afternoon]
+          doctor_id:
+            type: string
+
+    PatientViewEvent:
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id, staff_id]
+        properties:
+          patient_id:
+            type: string
+          staff_id:
+            type: string
+
+    SlotEvent:
+      contentType: application/json
+      payload:
+        type: object
+        required: [slot_id, status]
+        properties:
+          slot_id:
+            type: string
+            format: uuid
+          status:
+            type: string
+            enum: [available, booked, blocked]
+
+    NotesEvent:
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, doctor_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          doctor_id:
+            type: string

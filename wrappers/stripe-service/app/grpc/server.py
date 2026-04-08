@@ -9,17 +9,27 @@ from app.messaging.publisher import publish_event
 
 class PaymentServiceServicer(payment_pb2_grpc.PaymentServiceServicer):
     async def CreatePaymentRequest(self, request, context):
+        """Create a Stripe checkout session and publish payment.pending event.
+
+        Security: This gRPC endpoint is internal-only. Callers are already
+        authenticated at the API gateway layer (Kong locally, AWS API Gateway
+        in production). Only composite orchestrators running inside the
+        Docker/ECS network can reach this port — it is never exposed externally.
+        """
         try:
             session = create_checkout_session(
                 amount=settings.CONSULTATION_FEE_CENTS,
                 currency=settings.CURRENCY,
                 consultation_id=request.appointment_id,
                 patient_id=request.patient_id,
+                idempotency_key=request.appointment_id,
             )
             await publish_event("payment.pending", {
                 "consultation_id": request.appointment_id,
                 "patient_id": request.patient_id,
                 "payment_intent_id": session.id,
+                "amount_cents": settings.CONSULTATION_FEE_CENTS,
+                "currency": settings.CURRENCY,
                 "payment_link": session.url,
             })
             return payment_pb2.PaymentResponse(

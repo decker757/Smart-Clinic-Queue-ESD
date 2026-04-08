@@ -5,6 +5,7 @@ package patient;
 service PatientService {
   rpc GetPatient  (GetPatientRequest) returns (PatientResponse);
   rpc GetHistory  (GetHistoryRequest) returns (HistoryListResponse);
+  rpc GetMemos    (GetMemosRequest)   returns (MemoListResponse);
 }
 
 message GetPatientRequest {
@@ -37,4 +38,25 @@ message HistoryResponse {
 
 message HistoryListResponse {
   repeated HistoryResponse entries = 1;
+}
+
+message GetMemosRequest {
+  string patient_id = 1;
+}
+
+message MemoResponse {
+  string id             = 1;
+  string patient_id     = 2;
+  string title          = 3;
+  string content        = 4;
+  string file_url       = 5;
+  string file_type      = 6;
+  string record_type    = 7;
+  string issued_by      = 8;
+  string created_at     = 9;
+  string appointment_id = 10;
+}
+
+message MemoListResponse {
+  repeated MemoResponse memos = 1;
 }

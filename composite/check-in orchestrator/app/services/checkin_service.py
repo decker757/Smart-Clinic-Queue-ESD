@@ -12,7 +12,7 @@ async def process_check_in(body):
     now = datetime.now(timezone.utc)
     arrival_time = now + timedelta(minutes=eta_minutes)
 
-    if arrival_time <= body.appointment_time:
+    if body.appointment_time is None or arrival_time <= body.appointment_time:
         # Patient is on time
         await publish_event("queue.checked_in", {
             "patient_id": body.patient_id,
@@ -36,9 +36,11 @@ async def process_check_in(body):
 
 async def handle_confirmation(body):
     if body.is_coming:
+        travel_eta_minutes = max(0, int(body.eta_minutes or 0))
         await publish_event("queue.deprioritized", {
             "patient_id": body.patient_id,
             "appointment_id": body.appointment_id,
+            "travel_eta_minutes": travel_eta_minutes,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
         return {"status": "queue_deprioritized"}

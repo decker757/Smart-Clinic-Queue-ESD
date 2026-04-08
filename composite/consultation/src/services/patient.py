@@ -5,8 +5,9 @@ import grpc.aio
 from src.proto import patient_pb2, patient_pb2_grpc
 from src.config import settings
 
-channel = grpc.aio.insecure_channel(settings.PATIENT_SERVICE_GRPC)
-stub = patient_pb2_grpc.PatientServiceStub(channel)
+
+def _channel():
+    return grpc.aio.insecure_channel(settings.PATIENT_SERVICE_GRPC)
 
 
 async def create_doctor_record(
@@ -18,18 +19,20 @@ async def create_doctor_record(
     appointment_id: str = "",
 ):
     """Create an MC or prescription record on the patient's profile."""
-    response = await stub.CreateDoctorRecord(
-        patient_pb2.CreateDoctorRecordRequest(
-            patient_id=patient_id,
-            title=title,
-            content=content,
-            record_type=record_type,
-            issued_by=issued_by,
-            appointment_id=appointment_id,
-        ),
-        timeout=10,
-    )
-    return response
+    async with _channel() as channel:
+        stub = patient_pb2_grpc.PatientServiceStub(channel)
+        response = await stub.CreateDoctorRecord(
+            patient_pb2.CreateDoctorRecordRequest(
+                patient_id=patient_id,
+                title=title,
+                content=content,
+                record_type=record_type,
+                issued_by=issued_by,
+                appointment_id=appointment_id,
+            ),
+            timeout=10,
+        )
+        return response
 
 
 async def add_history(
@@ -37,15 +40,23 @@ async def add_history(
     diagnosis: str,
     notes: str = "",
     diagnosed_at: str = "",
+    appointment_id: str = "",
 ):
-    """Add a history entry to the patient's medical record."""
-    response = await stub.AddHistory(
-        patient_pb2.AddHistoryRequest(
-            patient_id=patient_id,
-            diagnosis=diagnosis,
-            notes=notes,
-            diagnosed_at=diagnosed_at,
-        ),
-        timeout=10,
-    )
-    return response
+    """Add a history entry to the patient's medical record.
+
+    When appointment_id is provided the write is idempotent — retrying the same
+    consultation completion will not create a duplicate history row.
+    """
+    async with _channel() as channel:
+        stub = patient_pb2_grpc.PatientServiceStub(channel)
+        response = await stub.AddHistory(
+            patient_pb2.AddHistoryRequest(
+                patient_id=patient_id,
+                diagnosis=diagnosis,
+                notes=notes,
+                diagnosed_at=diagnosed_at,
+                appointment_id=appointment_id,
+            ),
+            timeout=10,
+        )
+        return response

@@ -31,7 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 KONG="http://localhost:8000"
-BASE_AUTH="$KONG/api/auth"
+BASE_AUTH="http://localhost:3000/api/auth"
 BASE_COMPOSITE="$KONG"
 BASE_CHECKIN="$KONG/api"
 BASE_QUEUE="$KONG"
@@ -56,6 +56,28 @@ TTL_SHORT=false
 if [ -n "$LATE_TTL_MS" ] && [ "$LATE_TTL_MS" -le 15000 ] 2>/dev/null; then
     TTL_SHORT=true
 fi
+
+wait_for_code() {
+    URL="$1"
+    JWT="$2"
+    EXPECTED="$3"
+    LABEL="$4"
+    CODE="000"
+
+    for _ in $(seq 1 30); do
+        CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" \
+          -H "Authorization: Bearer $JWT")
+        if [ "$CODE" = "$EXPECTED" ]; then
+            break
+        fi
+        sleep 2
+    done
+
+    if [ "$CODE" != "$EXPECTED" ]; then
+        echo "FAIL: $LABEL (last HTTP $CODE)"
+        exit 1
+    fi
+}
 
 # ── Helper: construct a valid Stripe-Signature header ─────────────────────────
 sign_payload() {
@@ -126,6 +148,12 @@ echo "--- 3. Get JWT ---"
 JWT=$(curl -sf "$BASE_AUTH/token" \
   -H "Authorization: Bearer $SESSION_TOKEN" | jq -r '.token')
 echo "JWT acquired. USER_ID: $USER_ID"
+
+echo ""
+echo "--- 3b. Wait for Kong routes ---"
+wait_for_code "$BASE_COMPOSITE/api/composite/appointments/openapi.json" "$JWT" "200" "Composite appointment route ready"
+wait_for_code "$BASE_QUEUE/api/queue/openapi.json" "$JWT" "200" "Queue route ready"
+wait_for_code "$BASE_CHECKIN/check-in/openapi.json" "$JWT" "200" "Check-in route ready"
 
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
@@ -355,20 +383,28 @@ echo "━━━ PART 3: gRPC ━━━━━━━━━━━━━━━━━
 
 echo ""
 echo "--- G1. Service reflection (PaymentService registered) ---"
-grpcurl -plaintext "$GRPC_STRIPE" list 2>/dev/null | grep -q "payment.PaymentService" && \
-  echo "payment.PaymentService ✓" || \
-  echo "WARN: reflection not returning PaymentService (is stripe-service running?)"
+if command -v grpcurl >/dev/null 2>&1; then
+  grpcurl -plaintext "$GRPC_STRIPE" list 2>/dev/null | grep -q "payment.PaymentService" && \
+    echo "payment.PaymentService ✓" || \
+    echo "WARN: reflection not returning PaymentService (is stripe-service running?)"
+else
+  echo "SKIP: grpcurl not installed; skipping reflection check"
+fi
 
 echo ""
 echo "--- G2. CreatePaymentRequest (requires valid STRIPE_API_KEY) ---"
-grpcurl -plaintext \
-  -proto "$PROTO" \
-  -d "{
-    \"appointment_id\": \"$APPT_A\",
-    \"patient_id\": \"$USER_ID\"
-  }" \
-  "$GRPC_STRIPE" payment.PaymentService/CreatePaymentRequest 2>&1 | jq . 2>/dev/null || \
-  echo "(gRPC INTERNAL error expected if Stripe key is test/invalid)"
+if command -v grpcurl >/dev/null 2>&1; then
+  grpcurl -plaintext \
+    -proto "$PROTO" \
+    -d "{
+      \"appointment_id\": \"$APPT_A\",
+      \"patient_id\": \"$USER_ID\"
+    }" \
+    "$GRPC_STRIPE" payment.PaymentService/CreatePaymentRequest 2>&1 | jq . 2>/dev/null || \
+    echo "(gRPC INTERNAL error expected if Stripe key is test/invalid)"
+else
+  echo "SKIP: grpcurl not installed; skipping CreatePaymentRequest check"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""

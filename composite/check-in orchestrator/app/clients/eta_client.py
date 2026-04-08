@@ -8,8 +8,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ETA_MINUTES = 15  # fallback when ETA service is unavailable
 
-_channel = grpc.aio.insecure_channel(f"{settings.ETA_SERVICE_HOST}:{settings.ETA_SERVICE_PORT}")
-_stub = eta_pb2_grpc.ETAServiceStub(_channel)
+
+def _channel():
+    return grpc.aio.insecure_channel(f"{settings.ETA_SERVICE_HOST}:{settings.ETA_SERVICE_PORT}")
 
 
 async def get_travel_time(patient_location, clinic_location) -> int:
@@ -20,8 +21,10 @@ async def get_travel_time(patient_location, clinic_location) -> int:
             dest_lat=clinic_location.lat,
             dest_lng=clinic_location.lng,
         )
-        response = await _stub.GetTravelTime(request, timeout=2.0)
-        return response.travel_minutes
+        async with _channel() as channel:
+            stub = eta_pb2_grpc.ETAServiceStub(channel)
+            response = await stub.GetTravelTime(request, timeout=2.0)
+            return response.travel_minutes
     except grpc.aio.AioRpcError as e:
         logger.warning("ETA service unavailable (%s), using default %dm", e.code(), DEFAULT_ETA_MINUTES)
         return DEFAULT_ETA_MINUTES

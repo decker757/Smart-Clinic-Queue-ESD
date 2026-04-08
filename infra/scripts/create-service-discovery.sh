@@ -1,11 +1,31 @@
 #!/bin/sh
-# Create Cloud Map service discovery entries for all services.
+# Create Cloud Map service discovery entries for all backend services.
 # Run from repo root: sh infra/scripts/create-service-discovery.sh
 
 set -e
 
-REGION=ap-southeast-1
-NAMESPACE_ID=ns-cetcm7jpnixwoatx
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env.aws"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo "ERROR: $ENV_FILE not found."
+    echo "Copy env-aws.example to .env.aws and fill in your deployment config."
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+
+for var in AWS_REGION CLOUD_MAP_NAMESPACE_ID; do
+    eval val=\$$var
+    if [ -z "$val" ]; then
+        echo "ERROR: $var is not set in .env.aws"
+        exit 1
+    fi
+done
+
+REGION=$AWS_REGION
+NAMESPACE_ID=$CLOUD_MAP_NAMESPACE_ID
 
 create_sd() {
     NAME=$1
@@ -35,8 +55,7 @@ create_sd composite-patient-orchestrator
 create_sd composite-consultation
 create_sd composite-staff-orchestrator
 create_sd checkin-orchestrator
-create_sd frontend
 
 echo ""
 echo "All service discovery entries created."
-echo "Note the service IDs above — you'll need them when creating ECS services."
+echo "Frontend is deployed via S3/CloudFront and does not need Cloud Map."

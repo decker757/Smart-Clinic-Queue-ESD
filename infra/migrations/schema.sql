@@ -1,20 +1,88 @@
 -- Full schema for Smart Clinic Queue system.
 -- Run once against a fresh Supabase database.
--- Consolidates migrations 001–009.
+-- Consolidates migrations 001–015.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ─── BetterAuth ──────────────────────────────────────────────────────────────
--- Add role column to BetterAuth users table (created by BetterAuth on first run)
-ALTER TABLE betterauth.user
-    ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'patient';
+CREATE SCHEMA IF NOT EXISTS betterauth;
+
+CREATE TABLE IF NOT EXISTS betterauth."user" (
+    id              TEXT PRIMARY KEY,
+    name            TEXT        NOT NULL,
+    email           TEXT        NOT NULL UNIQUE,
+    "emailVerified" BOOLEAN     NOT NULL DEFAULT FALSE,
+    image           TEXT,
+    role            TEXT        NOT NULL DEFAULT 'patient',
+    "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS betterauth.session (
+    id           TEXT        PRIMARY KEY,
+    "userId"     TEXT        NOT NULL REFERENCES betterauth."user"(id) ON DELETE CASCADE,
+    token        TEXT        NOT NULL UNIQUE,
+    "expiresAt"  TIMESTAMPTZ NOT NULL,
+    "ipAddress"  TEXT,
+    "userAgent"  TEXT,
+    "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_betterauth_session_user_id
+    ON betterauth.session("userId");
+
+CREATE TABLE IF NOT EXISTS betterauth.account (
+    id                      TEXT        PRIMARY KEY,
+    "accountId"             TEXT        NOT NULL,
+    "providerId"            TEXT        NOT NULL,
+    "userId"                TEXT        NOT NULL REFERENCES betterauth."user"(id) ON DELETE CASCADE,
+    "accessToken"           TEXT,
+    "refreshToken"          TEXT,
+    "idToken"               TEXT,
+    "accessTokenExpiresAt"  TIMESTAMPTZ,
+    "refreshTokenExpiresAt" TIMESTAMPTZ,
+    scope                   TEXT,
+    password                TEXT,
+    "createdAt"             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt"             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_betterauth_account_provider UNIQUE ("providerId", "accountId")
+);
+
+CREATE INDEX IF NOT EXISTS idx_betterauth_account_user_id
+    ON betterauth.account("userId");
+
+CREATE TABLE IF NOT EXISTS betterauth.verification (
+    id           TEXT        PRIMARY KEY,
+    identifier   TEXT        NOT NULL,
+    value        TEXT        NOT NULL,
+    "expiresAt"  TIMESTAMPTZ NOT NULL,
+    "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_betterauth_verification_identifier
+    ON betterauth.verification(identifier, "createdAt" DESC);
+
+CREATE TABLE IF NOT EXISTS betterauth.jwks (
+    id           TEXT        PRIMARY KEY,
+    "publicKey"  TEXT        NOT NULL,
+    "privateKey" TEXT        NOT NULL,
+    "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "expiresAt"  TIMESTAMPTZ
+);
 
 -- ─── Appointments ────────────────────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS appointments;
 
+-- Lightweight copy of doctors used only for the FK on appointments.appointments.doctor_id.
+-- Kept in sync automatically by the trigger trg_sync_doctor_to_appointments on doctors.doctors.
+-- If a doctor is added manually here, also add them to doctors.doctors (the source of truth).
 CREATE TABLE IF NOT EXISTS appointments.doctors (
     id             TEXT        PRIMARY KEY,  -- BetterAuth nanoid
     name           TEXT        NOT NULL,
     specialization TEXT        NOT NULL,
-    slot_capacity  INT         NOT NULL DEFAULT 3,
+    slot_capacity  INT         NOT NULL DEFAULT 1,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -54,11 +122,19 @@ CREATE TABLE IF NOT EXISTS queue.queue_entries (
     doctor_id      TEXT,
     session        TEXT        CHECK (session IN ('morning', 'afternoon')),
     queue_number   INT         NOT NULL,
+    -- sort_key drives callNext ordering; initialised to queue_number * 1000.
+    -- Wide spacing lets deprioritize() insert between entries without renumbering.
+    -- queue_number is display-only and never changes after assignment.
+    sort_key                 BIGINT      NOT NULL DEFAULT 0,
     status         TEXT        NOT NULL DEFAULT 'waiting'
                                CHECK (status IN ('waiting', 'checked_in', 'called', 'in_progress', 'done', 'skipped', 'cancelled')),
-    estimated_time TIMESTAMPTZ,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    estimated_time           TIMESTAMPTZ,
+    -- Set to NOW() on check-in; overridden for late specific-booking patients
+    -- so callNext withholds their tier-0 slot until they physically arrive.
+    estimated_arrival_at     TIMESTAMPTZ,
+    approaching_notified_at  TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE SEQUENCE IF NOT EXISTS queue.queue_number_morning_seq START 1;
@@ -67,6 +143,9 @@ CREATE SEQUENCE IF NOT EXISTS queue.queue_number_afternoon_seq START 1;
 CREATE INDEX IF NOT EXISTS idx_queue_session_status ON queue.queue_entries(session, status);
 CREATE INDEX IF NOT EXISTS idx_queue_patient        ON queue.queue_entries(patient_id);
 CREATE INDEX IF NOT EXISTS idx_queue_number         ON queue.queue_entries(queue_number);
+CREATE INDEX IF NOT EXISTS idx_queue_status_doctor  ON queue.queue_entries(status, doctor_id) WHERE doctor_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_queue_status_session ON queue.queue_entries(status, session)    WHERE session IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_queue_sort_key       ON queue.queue_entries(sort_key);
 
 -- ─── Activity Log ────────────────────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS activity_log;
@@ -106,12 +185,13 @@ CREATE TABLE IF NOT EXISTS patients.patients (
 );
 
 CREATE TABLE IF NOT EXISTS patients.medical_history (
-    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id   TEXT        NOT NULL REFERENCES patients.patients(id),
-    diagnosis    TEXT        NOT NULL,
-    diagnosed_at DATE,
-    notes        TEXT,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id     TEXT        NOT NULL REFERENCES patients.patients(id),
+    diagnosis      TEXT        NOT NULL,
+    diagnosed_at   DATE,
+    notes          TEXT,
+    appointment_id TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS patients.memos (
@@ -128,7 +208,14 @@ CREATE TABLE IF NOT EXISTS patients.memos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_medical_history_patient ON patients.medical_history(patient_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_history_appointment
+    ON patients.medical_history (appointment_id)
+    WHERE appointment_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_memos_patient           ON patients.memos(patient_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_memos_appointment_record_type
+    ON patients.memos (appointment_id, record_type)
+    WHERE appointment_id IS NOT NULL;
 
 -- ─── Doctors ─────────────────────────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS doctors;
@@ -141,23 +228,46 @@ CREATE TABLE IF NOT EXISTS doctors.doctors (
     created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Sync new doctors into appointments.doctors so the FK on
+-- appointments.appointments.doctor_id is always satisfiable.
+CREATE OR REPLACE FUNCTION doctors.sync_to_appointments()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO appointments.doctors (id, name, specialization, slot_capacity)
+    VALUES (NEW.id, NEW.name, COALESCE(NEW.specialisation, ''), 1)
+    ON CONFLICT (id) DO UPDATE
+        SET name = EXCLUDED.name,
+            specialization = EXCLUDED.specialization;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_doctor_to_appointments ON doctors.doctors;
+CREATE TRIGGER trg_sync_doctor_to_appointments
+    AFTER INSERT OR UPDATE ON doctors.doctors
+    FOR EACH ROW EXECUTE FUNCTION doctors.sync_to_appointments();
+
 CREATE TABLE IF NOT EXISTS doctors.time_slots (
     id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     doctor_id  TEXT        REFERENCES doctors.doctors(id),
     start_time TIMESTAMPTZ NOT NULL,
     end_time   TIMESTAMPTZ NOT NULL,
     status     VARCHAR(50) DEFAULT 'available',
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_time_slots_doctor_start UNIQUE (doctor_id, start_time)
 );
 
 CREATE TABLE IF NOT EXISTS doctors.consultations (
-    id             UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
-    appointment_id UUID   UNIQUE,
-    doctor_id      TEXT   REFERENCES doctors.doctors(id),
-    patient_id     TEXT   NOT NULL,
-    notes          TEXT,
-    diagnosis      TEXT,
-    created_at     TIMESTAMPTZ DEFAULT NOW()
+    id                 UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    appointment_id     UUID   UNIQUE,
+    doctor_id          TEXT   REFERENCES doctors.doctors(id),
+    patient_id         TEXT   NOT NULL,
+    notes              TEXT,
+    diagnosis          TEXT,
+    completion_status  TEXT   NOT NULL DEFAULT 'processing'
+                              CHECK (completion_status IN ('processing', 'completed', 'failed')),
+    payment_link       TEXT,
+    created_at         TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_consultations_patient ON doctors.consultations(patient_id);
@@ -171,6 +281,8 @@ CREATE TABLE IF NOT EXISTS payments.payments (
     consultation_id   TEXT        NOT NULL,
     patient_id        TEXT        NOT NULL,
     payment_intent_id TEXT,
+    amount_cents      INT,
+    currency          TEXT        DEFAULT 'sgd',
     status            TEXT        NOT NULL,  -- 'pending' | 'paid' | 'failed'
     payment_link      TEXT,
     created_at        TIMESTAMPTZ DEFAULT NOW()
@@ -178,3 +290,6 @@ CREATE TABLE IF NOT EXISTS payments.payments (
 
 CREATE INDEX IF NOT EXISTS idx_payments_consultation ON payments.payments(consultation_id);
 CREATE INDEX IF NOT EXISTS idx_payments_patient      ON payments.payments(patient_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_consultation_intent
+    ON payments.payments (consultation_id, payment_intent_id)
+    WHERE payment_intent_id IS NOT NULL;

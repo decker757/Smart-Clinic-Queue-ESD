@@ -3,5 +3,6 @@ pydantic
 uvicorn
 httpx
 aio-pika
+redis[asyncio]
 python-dotenv
 PyJWT[crypto]

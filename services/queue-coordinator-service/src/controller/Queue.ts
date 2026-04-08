@@ -102,7 +102,7 @@ router.post("/call-next", async (req: Request, res: Response) => {
         res.json(next);
         broadcastAllPatientPositions().catch(() => {});
     } catch (e: any) {
-        if (e.message === "No waiting patients in queue") {
+        if (e.message === "No checked-in patients in queue") {
             res.status(404).json({ error: e.message });
         } else {
             res.status(500).json({ error: "Internal server error" });
@@ -121,11 +121,13 @@ router.get("/current/:doctor_id", async (req: Request, res: Response) => {
     }
 });
 
-// POST /queue/deprioritize/:appointment_id — move patient to back of queue
+// POST /queue/deprioritize/:appointment_id — shift late patient back by slot bands
+// Body: { travel_eta_minutes: number }  (optional, defaults to 0 → minimum 1 slot shift)
 router.post("/deprioritize/:appointment_id", async (req: Request, res: Response) => {
     try {
         const appointment_id = req.params.appointment_id as string;
-        const entry = await QueueService.deprioritize(appointment_id);
+        const travel_eta_minutes = Number(req.body?.travel_eta_minutes ?? 0);
+        const entry = await QueueService.deprioritize(appointment_id, travel_eta_minutes);
         broadcastQueueUpdate(appointment_id, entry);
         res.json(entry);
         broadcastAllPatientPositions().catch(() => {});

@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { apiError } from '@/utils/api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const WS_BASE  = import.meta.env.VITE_WS_BASE_URL  ?? API_BASE
@@ -217,7 +218,7 @@ export function useAppointment() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.error ?? 'Check-in failed. Please try again.')
+      throw new Error(apiError(body, 'Check-in failed. Please try again.'))
     }
     return res.json()
   }
@@ -241,7 +242,7 @@ export function useAppointment() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Check-in failed. Please try again.')
+      throw new Error(apiError(body, 'Check-in failed. Please try again.'))
     }
     return res.json()
   }
@@ -249,15 +250,20 @@ export function useAppointment() {
   /**
    * Confirms late check-in: patient indicates whether they are still coming.
    */
-  async function confirmCheckIn({ patientId, appointmentId, isComing }) {
+  async function confirmCheckIn({ patientId, appointmentId, isComing, etaMinutes = null }) {
     const res = await fetch(`${API_BASE}/api/check-in/confirm`, {
       method: 'POST',
       headers: { ...authHeaders(authStore.jwt), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patient_id: patientId, appointment_id: appointmentId, is_coming: isComing }),
+      body: JSON.stringify({
+        patient_id: patientId,
+        appointment_id: appointmentId,
+        is_coming: isComing,
+        eta_minutes: etaMinutes,
+      }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Failed to confirm. Please try again.')
+      throw new Error(apiError(body, 'Failed to confirm. Please try again.'))
     }
     return res.json()
   }

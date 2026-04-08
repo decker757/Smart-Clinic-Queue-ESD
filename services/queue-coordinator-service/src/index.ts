@@ -1,11 +1,13 @@
 import http from "http";
 import express, { Request, Response, NextFunction } from "express";
+import swaggerUi from "swagger-ui-express";
 import cron from "node-cron";
 import queueRouter from "./controller/Queue";
 import { startConsumer } from "./consumer/rabbitmq";
 import { createWsServer } from "./ws/manager";
 import { startGrpcServer } from "./grpc";
 import { resetDailyQueue } from "./service/Queue";
+import { swaggerSpec } from "./swagger";
 
 const app = express();
 
@@ -22,6 +24,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.json());
+app.get("/health", (_req: Request, res: Response) => res.json({ status: "ok", service: "queue-coordinator-service" }));
+app.get("/api/queue/openapi.json", (_req: Request, res: Response) => res.json(swaggerSpec));
+app.use("/api/queue/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/queue", queueRouter);
 
 const PORT = parseInt(process.env.PORT || "3002");

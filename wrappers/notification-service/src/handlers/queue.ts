@@ -2,6 +2,14 @@ import { sendSms } from "../notify/sms";
 import { getPatientPhone } from "../notify/patient";
 import { dedup } from "../util/dedup";
 
+export async function handleApproaching(payload: any) {
+    if (!payload?.patient_id) { console.warn("[queue.approaching] missing patient_id, skipping"); return; }
+    if (!dedup(payload.appointment_id, "queue.approaching")) return;
+    const phone = await getPatientPhone(payload.patient_id);
+    if (!phone) { console.warn(`No phone for patient ${payload.patient_id}`); return; }
+    await sendSms(phone, `Your turn is coming up soon at Sunshine Polyclinic. Please check in via the app now or your slot will be released in 10 minutes.`);
+}
+
 export async function handleCheckedIn(payload: any) {
     if (!payload?.patient_id) { console.warn("[queue.checked_in] missing patient_id, skipping"); return; }
     const phone = await getPatientPhone(payload.patient_id);

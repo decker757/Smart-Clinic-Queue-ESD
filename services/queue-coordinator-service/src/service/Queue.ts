@@ -36,8 +36,10 @@ export async function addToQueue(appointment: AppointmentInfo): Promise<QueueEnt
             : "queue_number_morning_seq";
 
         const { rows } = await pool.query(`
-            INSERT INTO queue.queue_entries (appointment_id, patient_id, doctor_id, session, queue_number, status)
-            VALUES ($1, $2, $3, $4, NEXTVAL('queue.${sequenceName}'), 'waiting')
+            WITH seq AS (SELECT NEXTVAL('queue.${sequenceName}') AS qn)
+            INSERT INTO queue.queue_entries (appointment_id, patient_id, doctor_id, session, queue_number, sort_key, status)
+            SELECT $1, $2, $3, $4, seq.qn, seq.qn * 1000, 'waiting'
+            FROM seq
             RETURNING *
         `, [
             appointment.appointment_id,
@@ -79,9 +81,14 @@ export async function getQueuePosition(appointment_id: string, callerId?: string
         }
 
         const response = await pool.query(`
-            SELECT e.queue_number, e.estimated_time, e.status, e.doctor_id, e.session,
+            SELECT e.queue_number,
+                   COALESCE(e.sort_key, e.queue_number * 1000) AS sort_key,
+                   e.estimated_time,
+                   e.status,
+                   e.doctor_id,
+                   e.session,
                    (SELECT COUNT(*) FROM queue.queue_entries a
-                    WHERE a.queue_number < e.queue_number
+                    WHERE COALESCE(a.sort_key, a.queue_number * 1000) < COALESCE(e.sort_key, e.queue_number * 1000)
                       AND a.status NOT IN ('done', 'cancelled')
                       AND (
                         (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
@@ -154,7 +161,10 @@ export async function checkIn(appointment_id: string, callerId?: string): Promis
         if (entry.status === "waiting") {
             // Normal check-in — patient confirmed present
             const { rows: updated } = await pool.query(`
-                UPDATE queue.queue_entries SET status = 'checked_in', updated_at = NOW()
+                UPDATE queue.queue_entries
+                SET status = 'checked_in',
+                    estimated_arrival_at = NOW(),
+                    updated_at = NOW()
                 WHERE appointment_id = $1 RETURNING *
             `, [appointment_id]);
             await redis.del(cacheKey(appointment_id));
@@ -163,16 +173,20 @@ export async function checkIn(appointment_id: string, callerId?: string): Promis
 
         if (entry.status === "skipped") {
             // Late arrival — rejoin at the back of the queue with a new number.
-            // NEXTVAL is inlined so the sequence increment and the row update are
-            // a single round-trip. The AND status = 'skipped' guard makes this
-            // atomic: a concurrent check-in will match 0 rows and get an error.
+            // CTE ensures the NEXTVAL and the UPDATE are a single round-trip.
+            // sort_key is also reset to new_qn * 1000 so ordering stays consistent.
             const { rows: updated } = await pool.query(`
-                UPDATE queue.queue_entries
-                SET status = 'waiting',
-                    queue_number = CASE session
+                WITH new_num AS (
+                    SELECT CASE (SELECT session FROM queue.queue_entries WHERE appointment_id = $1)
                         WHEN 'afternoon' THEN NEXTVAL('queue.queue_number_afternoon_seq')
                         ELSE NEXTVAL('queue.queue_number_morning_seq')
-                    END,
+                    END AS qn
+                )
+                UPDATE queue.queue_entries
+                SET status = 'waiting',
+                    queue_number = (SELECT qn FROM new_num),
+                    sort_key = (SELECT qn FROM new_num) * 1000,
+                    estimated_arrival_at = NOW(),
                     updated_at = NOW()
                 WHERE appointment_id = $1 AND status = 'skipped'
                 RETURNING *
@@ -205,40 +219,81 @@ export async function markNoShow(appointment_id: string): Promise<QueueEntry> {
     }
 }
 
-// Patient confirmed they are still coming but will be late — move to back of queue.
-export async function deprioritize(appointment_id: string): Promise<QueueEntry> {
+// Patient confirmed they are still coming but will be late.
+//
+// Generic queue patients: shift back by ceil(travel_eta_minutes / 15) slot bands
+// using sort_key midpoint insertion. queue_number (display) is unchanged.
+//
+// Specific booking patients: set estimated_arrival_at = NOW() + travel_eta so
+// callNext withholds their tier-0 slot until they physically arrive.
+export async function deprioritize(appointment_id: string, travel_eta_minutes: number = 0): Promise<QueueEntry> {
     try {
-        const { rows } = await pool.query(`
-            UPDATE queue.queue_entries
-            SET status = 'waiting',
-                queue_number = CASE session
-                    WHEN 'afternoon' THEN NEXTVAL('queue.queue_number_afternoon_seq')
-                    ELSE NEXTVAL('queue.queue_number_morning_seq')
-                END,
-                updated_at = NOW()
-            WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
-            RETURNING *
-        `, [appointment_id]);
-        if (!rows[0]) throw new Error("Appointment not in queue");
+        const { rows: entryRows } = await pool.query(
+            `SELECT * FROM queue.queue_entries WHERE appointment_id = $1`,
+            [appointment_id]
+        );
+        if (!entryRows[0]) throw new Error("Appointment not in queue");
+        const current = entryRows[0];
+        if (['done', 'cancelled'].includes(current.status)) throw new Error("Appointment not in queue");
+
+        let updated: any;
+
+        if (current.session !== null && current.session !== undefined) {
+            // ── Generic queue patient: slot-band shift ──────────────────────────
+            const slots_to_shift = Math.max(1, Math.ceil(travel_eta_minutes / 15));
+
+            // All active generic entries for this session ordered by sort_key
+            const { rows: peers } = await pool.query(`
+                SELECT COALESCE(sort_key, queue_number * 1000) AS sort_key
+                FROM queue.queue_entries
+                WHERE session = $1
+                  AND doctor_id IS NULL
+                  AND status NOT IN ('done', 'cancelled')
+                ORDER BY COALESCE(sort_key, queue_number * 1000) ASC, queue_number ASC
+            `, [current.session]);
+
+            const currentSortKey = Number(current.sort_key ?? (current.queue_number * 1000));
+            const currentPos = peers.findIndex((r: any) => Number(r.sort_key) === currentSortKey);
+            const targetPos = Math.min(
+                currentPos === -1 ? peers.length - 1 : currentPos + slots_to_shift,
+                peers.length - 1
+            );
+
+            let newSortKey: number;
+            if (peers.length === 0 || targetPos >= peers.length - 1) {
+                // Place at end
+                const last = peers[peers.length - 1];
+                newSortKey = (last ? Number(last.sort_key) : currentSortKey) + 1000;
+            } else {
+                const targetSortKey = Number(peers[targetPos].sort_key);
+                const nextSortKey   = Number(peers[targetPos + 1].sort_key);
+                newSortKey = targetSortKey + Math.floor((nextSortKey - targetSortKey) / 2);
+            }
+
+            const { rows } = await pool.query(`
+                UPDATE queue.queue_entries
+                SET sort_key = $2,
+                    estimated_arrival_at = NOW() + ($3 * INTERVAL '1 minute'),
+                    updated_at = NOW()
+                WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
+                RETURNING *
+            `, [appointment_id, newSortKey, travel_eta_minutes]);
+            updated = rows[0];
+        } else {
+            // ── Specific booking patient: defer tier-0 until arrival ────────────
+            const { rows } = await pool.query(`
+                UPDATE queue.queue_entries
+                SET estimated_arrival_at = NOW() + ($2 * INTERVAL '1 minute'),
+                    updated_at = NOW()
+                WHERE appointment_id = $1 AND status NOT IN ('done', 'cancelled')
+                RETURNING *
+            `, [appointment_id, travel_eta_minutes]);
+            updated = rows[0];
+        }
+
+        if (!updated) throw new Error("Appointment not in queue");
         await redis.del(cacheKey(appointment_id));
-
-        // Compute estimated_time based on new queue position (same logic as getQueuePosition)
-        const entry = rows[0];
-        const { rows: countRows } = await pool.query(`
-            SELECT COUNT(*) AS active_ahead
-            FROM queue.queue_entries a
-            WHERE a.queue_number < $1
-              AND a.status NOT IN ('done', 'cancelled')
-              AND (
-                ($2::text IS NOT NULL AND a.doctor_id = $2)
-                OR
-                ($2::text IS NULL AND a.session = $3 AND a.doctor_id IS NULL)
-              )
-        `, [entry.queue_number, entry.doctor_id, entry.session]);
-        const aheadMinutes = Number(countRows[0]?.active_ahead ?? 0) * 15;
-        entry.estimated_time = new Date(Date.now() + aheadMinutes * 60 * 1000).toISOString();
-
-        return entry as QueueEntry;
+        return updated as QueueEntry;
     } catch (e) {
         console.error("Error deprioritizing appointment:", e);
         throw e;
@@ -276,18 +331,57 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
     try {
         const { rows } = await pool.query(`
             UPDATE queue.queue_entries
-            SET status = 'called', updated_at = NOW()
+            SET status    = 'called',
+                doctor_id = COALESCE(doctor_id, $2),
+                updated_at = NOW()
             WHERE id = (
-                SELECT id FROM queue.queue_entries
-                WHERE status = 'checked_in'
+                SELECT qe.id
+                FROM queue.queue_entries qe
+                INNER JOIN appointments.appointments a
+                    ON a.id = qe.appointment_id::uuid
+                WHERE qe.status = 'checked_in'
                   AND (
-                      -- specific-doctor booking: patient booked this doctor
-                      ($2::text IS NOT NULL AND doctor_id = $2 AND session IS NULL)
+                      -- specific booking for this doctor
+                      ($2::text IS NOT NULL AND qe.doctor_id = $2 AND qe.session IS NULL)
                       OR
-                      -- session-based booking: no doctor preference, match by session
-                      (session = $1 AND doctor_id IS NULL)
+                      -- generic queue patient (no doctor preference)
+                      (qe.session = $1 AND qe.doctor_id IS NULL)
                   )
-                ORDER BY queue_number ASC
+                ORDER BY
+                  CASE
+                    -- Tier 0: specific booking due AND patient has arrived (or no ETA override)
+                    WHEN qe.doctor_id = $2
+                      AND a.start_time <= NOW()
+                      AND (qe.estimated_arrival_at IS NULL OR qe.estimated_arrival_at <= NOW())
+                    THEN 0
+
+                    -- Tier 1: generic patient — arrived AND the current 15-min slot has no
+                    -- checked-in specific booking waiting to be seen.
+                    -- If doctor_id is NULL (session-based call) skip the slot-protection check.
+                    WHEN qe.doctor_id IS NULL
+                      AND (qe.estimated_arrival_at IS NULL OR qe.estimated_arrival_at <= NOW())
+                      AND (
+                        $2::text IS NULL
+                        OR NOT EXISTS (
+                          SELECT 1
+                          FROM queue.queue_entries qe2
+                          INNER JOIN appointments.appointments a2
+                              ON a2.id = qe2.appointment_id::uuid
+                          WHERE qe2.doctor_id = $2
+                            AND qe2.status = 'checked_in'
+                            AND a2.start_time = date_trunc('hour', NOW())
+                                + (FLOOR(EXTRACT(minute FROM NOW()) / 15) * INTERVAL '15 minutes')
+                        )
+                      )
+                    THEN 1
+
+                    -- Tier 2: everything else (specific not yet due, or generic blocked by slot)
+                    ELSE 2
+                  END ASC,
+                  -- Within each tier: generic patients ordered by slot-band (sort_key);
+                  -- specific patients ordered by sort_key which equals queue_number * 1000
+                  COALESCE(qe.sort_key, qe.queue_number * 1000) ASC,
+                  qe.queue_number ASC
                 LIMIT 1
             )
             RETURNING *
@@ -303,11 +397,31 @@ export async function callNext(session: string, doctor_id?: string): Promise<Que
     }
 }
 
+// Mark that we've sent the "approaching" notification so we don't re-fire on the next tick.
+export async function markApproachingNotified(appointment_id: string): Promise<void> {
+    await pool.query(`
+        UPDATE queue.queue_entries
+        SET approaching_notified_at = NOW()
+        WHERE appointment_id = $1 AND status = 'waiting' AND approaching_notified_at IS NULL
+    `, [appointment_id]);
+}
+
+// Remove a patient only if they're still waiting (haven't checked in during the TTL window).
+export async function removeIfWaiting(appointment_id: string): Promise<QueueEntry | null> {
+    const { rows } = await pool.query(`
+        UPDATE queue.queue_entries SET status = 'cancelled', updated_at = NOW()
+        WHERE appointment_id = $1 AND status = 'waiting'
+        RETURNING *
+    `, [appointment_id]);
+    if (rows[0]) await redis.del(cacheKey(appointment_id));
+    return rows[0] ?? null;
+}
+
 export async function listActiveQueue(): Promise<QueueEntry[]> {
     const { rows } = await pool.query(`
         SELECT * FROM queue.queue_entries
         WHERE status NOT IN ('done', 'cancelled')
-        ORDER BY queue_number ASC
+        ORDER BY COALESCE(sort_key, queue_number * 1000) ASC, queue_number ASC
     `);
     return rows as QueueEntry[];
 }

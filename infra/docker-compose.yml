@@ -15,10 +15,17 @@ services:
       COMPOSITE_PATIENT_URL: http://composite-patient-orchestrator:8001
       COMPOSITE_CONSULTATION_URL: http://composite-consultation:8002
       COMPOSITE_STAFF_URL: http://composite-staff-orchestrator:8004
+      PATIENT_SERVICE_URL: http://patient-service:3007
+      ACTIVITY_LOG_SERVICE_URL: http://activity-log-service:3005
       DOCTOR_SERVICE_URL: http://doctor-service:3006
       QUEUE_COORDINATOR_URL: http://queue-coordinator-service:3002
       CHECKIN_ORCHESTRATOR_URL: http://checkin-orchestrator:8000
       PAYMENT_SERVICE_URL: http://payment-service:3008
+      STRIPE_SERVICE_URL: http://stripe-service:8001
+      KONG_DNS_VALID_TTL: 1
+      KONG_DNS_STALE_TTL: 0
+      KONG_DNS_ERROR_TTL: 1
+      KONG_DNS_NOT_FOUND_TTL: 1
     ports:
       - "8000:8000"   # proxy
       - "8444:8001"   # admin API
@@ -33,8 +40,8 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
-      - "5672:5672"    # AMQP
-      - "15672:15672"  # management UI
+      - "5673:5672"    # AMQP (host-side offset avoids collisions with other local RabbitMQ instances)
+      - "15673:15672"  # management UI (host-side offset avoids collisions with other local RabbitMQ instances)
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -42,8 +49,9 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 15s
+      start_period: 20s
       retries: 5
 
   # ─── Cache ──────────────────────────────────────────────────
@@ -66,6 +74,7 @@ services:
       POSTGRES_DB: clinic
     volumes:
       - app-db-data:/var/lib/postgresql/data
+      - ./migrations/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "app", "-d", "clinic"]
       interval: 5s
@@ -82,7 +91,7 @@ services:
     env_file:
       - ./env/auth.env
     depends_on:
-      rabbitmq:
+      app-db:
         condition: service_healthy
     restart: unless-stopped
 
@@ -190,34 +199,49 @@ services:
     restart: unless-stopped
 
   # ─── Composite Services ─────────────────────────────────────
+  # Composite orchestrators are stateless and sit behind Kong, which
+  # round-robins across replicas via Docker DNS.  deploy.replicas > 1
+  # demonstrates horizontal scaling; Kong load-balances automatically.
+  # Host-port bindings are omitted on scaled services because multiple
+  # containers cannot share the same host port — reach them via Kong (:8000).
+
   composite-appointment:
     build:
       context: ..
       dockerfile: composite/appointment/Dockerfile
-    ports:
-      - "8080:8000"
+    deploy:
+      replicas: 2
     env_file:
       - ./env/composite-appointment.env
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
   checkin-orchestrator:
     build:
       context: ../composite/check-in orchestrator
-    container_name: checkin-orchestrator
     ports:
       - "8085:8000"  # HOST_PORT:CONTAINER_PORT
     env_file:
       - ./env/checkin-orchestrator.env
+    depends_on:
+      auth-service:
+        condition: service_started
+      eta-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
   composite-patient-orchestrator:
     build:
       context: ..
       dockerfile: composite/patient-orchestrator/Dockerfile
-    ports:
-      - "8082:8001"
+    deploy:
+      replicas: 2
     env_file:
       - ./env/composite-patient-orchestrator.env
     depends_on:
@@ -231,8 +255,8 @@ services:
     build:
       context: ..
       dockerfile: composite/staff-orchestrator/Dockerfile
-    ports:
-      - "8084:8004"
+    deploy:
+      replicas: 2
     env_file:
       - ./env/composite-staff-orchestrator.env
     depends_on:
@@ -250,8 +274,8 @@ services:
     build:
       context: ..
       dockerfile: composite/consultation/Dockerfile
-    ports:
-      - "8083:8002"
+    deploy:
+      replicas: 2
     env_file:
       - ./env/composite-consultation.env
     depends_on:
@@ -311,6 +335,7 @@ services:
     environment:
       # Browser-side var — points at Kong on the host machine
       VITE_API_BASE_URL: http://localhost:8000
+      VITE_AUTH_MODE: betterauth
     restart: unless-stopped
 
 volumes:

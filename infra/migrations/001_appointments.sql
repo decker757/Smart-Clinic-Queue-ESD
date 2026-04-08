@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE SCHEMA IF NOT EXISTS appointments;
 
 SET search_path TO appointments;
@@ -6,7 +8,7 @@ CREATE TABLE IF NOT EXISTS doctors (
     id              TEXT PRIMARY KEY,  -- BetterAuth nanoid (not UUID)
     name            TEXT NOT NULL,
     specialization  TEXT NOT NULL,
-    slot_capacity   INT  NOT NULL DEFAULT 3,
+    slot_capacity   INT  NOT NULL DEFAULT 1,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

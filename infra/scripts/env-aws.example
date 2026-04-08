@@ -1,0 +1,65 @@
+# AWS deployment config — copy to .env.aws and fill in real values.
+# .env.aws is gitignored; NEVER commit the real file.
+
+# AWS account / region / cluster
+AWS_ACCOUNT_ID="123456789012"
+AWS_REGION="ap-southeast-1"
+ECS_CLUSTER_NAME="smart-clinic-queue"
+ECS_TASK_EXECUTION_ROLE_ARN="arn:aws:iam::123456789012:role/ecsTaskExecutionRole"
+CLOUDWATCH_LOG_GROUP="/ecs/smart-clinic"
+
+# Networking
+ECS_SUBNETS="subnet-aaa,subnet-bbb,subnet-ccc"
+ECS_SECURITY_GROUP="sg-xxxxxxxxxxxxxxxxx"
+ECS_ASSIGN_PUBLIC_IP="ENABLED"
+ECS_DESIRED_COUNT="1"
+
+# Cloud Map
+CLOUD_MAP_NAMESPACE="smart-clinic.local"
+CLOUD_MAP_NAMESPACE_ID="ns-xxxxxxxxxxxxxxxx"
+
+# Public URLs
+FRONTEND_BASE_URL="https://your-cloudfront-domain"
+BETTER_AUTH_URL="https://your-api-gateway-or-api-domain"
+STRIPE_SUCCESS_URL=""
+STRIPE_CANCEL_URL=""
+
+# Cognito
+COGNITO_USER_POOL_ID="ap-southeast-1_xxxxxxxxx"
+COGNITO_JWKS_URL="https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_xxxxxxxxx/.well-known/jwks.json"
+
+# Datastores and secrets
+DB_URL="postgresql://postgres:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/postgres?sslmode=require"
+MQ_URL="amqps://YOUR_USER:YOUR_PASSWORD@YOUR_MQ_ENDPOINT:5671"
+REDIS_URL="rediss://YOUR_ELASTICACHE_ENDPOINT:6379"
+BETTER_AUTH_SECRET="YOUR_AUTH_SECRET"
+
+AWS_ACCESS_KEY_ID="YOUR_ACCESS_KEY"
+AWS_SECRET_ACCESS_KEY="YOUR_SECRET_KEY"
+S3_BUCKET="YOUR_S3_BUCKET"
+
+GOOGLE_MAPS_API_KEY="YOUR_GOOGLE_MAPS_KEY"
+
+TWILIO_ACCOUNT_SID="YOUR_TWILIO_SID"
+TWILIO_AUTH_TOKEN="YOUR_TWILIO_TOKEN"
+TWILIO_PHONE_NUMBER="YOUR_TWILIO_NUMBER"
+
+STRIPE_API_KEY="YOUR_STRIPE_KEY"
+STRIPE_WEBHOOK_SIGNING_SECRET="YOUR_STRIPE_WEBHOOK_SECRET"
+
+# Auto-scaling (used by enable-auto-scaling.sh)
+AUTOSCALING_MIN_TASKS="1"
+AUTOSCALING_MAX_TASKS="4"
+AUTOSCALING_CPU_TARGET="70"
+
+# ALB target group names for public services
+TG_AUTH_NAME="smart-clinic-auth"
+TG_QUEUE_NAME="smart-clinic-queue"
+TG_COMPOSITE_APPOINTMENT_NAME="smart-clinic-composite-appointment"
+TG_CHECKIN_NAME="smart-clinic-checkin"
+TG_COMPOSITE_CONSULTATION_NAME="smart-clinic-composite-consultation"
+TG_COMPOSITE_STAFF_NAME="smart-clinic-composite-staff"
+TG_COMPOSITE_PATIENT_NAME="smart-clinic-composite-patient"
+TG_PAYMENT_NAME="smart-clinic-payment"
+TG_STRIPE_WEBHOOK_NAME="smart-clinic-stripe-webhook"
+TG_APPOINTMENT_NAME="smart-clinic-appointment"

@@ -136,7 +136,7 @@ func CreateAppointment(db *sql.DB) gin.HandlerFunc {
 					  AND status NOT IN ('cancelled', 'no_show', 'completed')
 				) < COALESCE(
 					(SELECT slot_capacity FROM doctors WHERE id = $2),
-					3
+					1
 				)
 			)
 			RETURNING id::text, patient_id::text, doctor_id::text,

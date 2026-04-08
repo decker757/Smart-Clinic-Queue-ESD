@@ -31,6 +31,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -57,6 +58,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -80,6 +82,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -99,10 +102,12 @@ services:
             - "*"
           methods:
             - GET
+            - POST
             - OPTIONS
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -129,6 +134,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -154,6 +160,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -177,6 +184,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -187,6 +195,9 @@ services:
           - /api/activity-log
         strip_path: false
 
+  # Note: Kong service name uses "check-in-orchestrator" while the Docker
+  # container is "checkin-orchestrator". The URL resolves correctly via
+  # $CHECKIN_ORCHESTRATOR_URL (set in docker-compose.yml).
   - name: check-in-orchestrator
     url: $CHECKIN_ORCHESTRATOR_URL
     plugins:
@@ -200,6 +211,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -223,6 +235,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:
@@ -231,6 +244,26 @@ services:
       - name: payment-route
         paths:
           - /api/payments
+        strip_path: false
+
+  - name: stripe-service
+    url: $STRIPE_SERVICE_URL
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - POST
+            - OPTIONS
+          headers:
+            - Content-Type
+            - Stripe-Signature
+          preflight_continue: false
+    routes:
+      - name: stripe-webhook-route
+        paths:
+          - /api/payments/webhook
         strip_path: false
 
   - name: queue-coordinator-service
@@ -250,6 +283,7 @@ services:
           headers:
             - Authorization
             - Content-Type
+            - X-Idempotency-Key
           preflight_continue: false
       - name: jwt
         config:

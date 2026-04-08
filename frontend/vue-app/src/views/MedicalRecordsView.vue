@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { apiError } from '@/utils/api'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -64,12 +65,63 @@ async function loadMemos() {
     })
     if (res.status === 404) { memos.value = []; return }
     if (!res.ok) throw new Error(`Failed to load records (${res.status})`)
-    memos.value = ((await res.json()) ?? []).filter(m => m.record_type === 'memo')
+    // Show all record types: patient memos, doctor-issued MC, and prescriptions
+    memos.value = ((await res.json()) ?? [])
   } catch (e) {
     fetchError.value = e.message ?? 'Could not load medical records.'
   } finally {
     loading.value = false
   }
+}
+
+// Resolve file URLs: relative paths (from local Docker uploads) need the API
+// base prepended so the browser can reach them through Kong.
+function resolveFileUrl(url) {
+  if (!url) return url
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  return `${API_BASE}${url}`
+}
+
+async function openFile(memo) {
+  if (!memo?.file_url) return
+
+  const url = resolveFileUrl(memo.file_url)
+  if (/^https?:\/\//.test(memo.file_url)) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+
+  submitError.value = ''
+  try {
+    const res = await fetch(url, { headers: authHeaders() })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(apiError(body, 'Could not open file'))
+    }
+
+    const blob = await res.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer')
+    if (!opened) {
+      URL.revokeObjectURL(objectUrl)
+      throw new Error('Browser blocked the file preview')
+    }
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  } catch (e) {
+    submitError.value = e.message ?? 'Could not open file'
+  }
+}
+
+function recordLabel(type) {
+  if (type === 'mc') return 'Medical Certificate'
+  if (type === 'prescription') return 'Prescription'
+  return 'Note'
+}
+
+function recordLabelClass(type) {
+  if (type === 'mc') return 'bg-blue-50 text-blue-700'
+  if (type === 'prescription') return 'bg-amber-50 text-amber-700'
+  return 'bg-slate-50 text-slate-500'
 }
 
 onMounted(() => {
@@ -90,7 +142,7 @@ async function submitText() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.error ?? 'Failed to save note')
+      throw new Error(body.detail ?? body.error ?? 'Failed to save note')
     }
     const memo = await res.json()
     memos.value.unshift(memo)
@@ -125,7 +177,7 @@ async function submitFile() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.error ?? 'Upload failed')
+      throw new Error(body.detail ?? body.error ?? 'Upload failed')
     }
     const memo = await res.json()
     memos.value.unshift(memo)
@@ -362,13 +414,23 @@ function cancelForms() {
             <!-- Icon -->
             <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
               :class="{
-                'bg-blue-50': fileIcon(memo.file_type) === 'img',
-                'bg-red-50': fileIcon(memo.file_type) === 'pdf',
-                'bg-primary/8': fileIcon(memo.file_type) === 'doc' && memo.file_url,
-                'bg-slate-50': !memo.file_url,
+                'bg-blue-50': memo.record_type === 'mc',
+                'bg-amber-50': memo.record_type === 'prescription',
+                'bg-red-50': memo.record_type === 'memo' && fileIcon(memo.file_type) === 'pdf',
+                'bg-primary/8': memo.record_type === 'memo' && memo.file_url && fileIcon(memo.file_type) !== 'pdf',
+                'bg-slate-50': memo.record_type === 'memo' && !memo.file_url,
               }"
             >
-              <svg v-if="!memo.file_url" class="w-5 h-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <!-- MC icon -->
+              <svg v-if="memo.record_type === 'mc'" class="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" />
+              </svg>
+              <!-- Prescription icon -->
+              <svg v-else-if="memo.record_type === 'prescription'" class="w-5 h-5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+              </svg>
+              <!-- Patient note icon (no file) -->
+              <svg v-else-if="!memo.file_url" class="w-5 h-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
               </svg>
               <svg v-else-if="fileIcon(memo.file_type) === 'img'" class="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -384,8 +446,20 @@ function cancelForms() {
 
             <!-- Summary -->
             <div class="flex-1 min-w-0">
-              <p class="font-semibold text-sm text-text truncate">{{ memo.title }}</p>
-              <p class="text-xs text-slate-400 mt-0.5">{{ formatDate(memo.created_at) }}</p>
+              <div class="flex items-center gap-2">
+                <p class="font-semibold text-sm text-text truncate">{{ memo.title }}</p>
+                <span
+                  v-if="memo.record_type !== 'memo'"
+                  class="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                  :class="recordLabelClass(memo.record_type)"
+                >
+                  {{ recordLabel(memo.record_type) }}
+                </span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">
+                {{ formatDate(memo.created_at) }}
+                <span v-if="memo.issued_by" class="text-slate-300"> · Issued by doctor</span>
+              </p>
             </div>
 
             <!-- Chevron -->
@@ -401,18 +475,17 @@ function cancelForms() {
           <!-- Expanded detail -->
           <div v-if="expandedId === memo.id" class="border-t border-slate-100 px-4 py-4 space-y-3">
             <p v-if="memo.content" class="text-sm text-text whitespace-pre-wrap">{{ memo.content }}</p>
-            <a
+            <button
               v-if="memo.file_url"
-              :href="memo.file_url"
-              target="_blank"
-              rel="noopener noreferrer"
+              type="button"
               class="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
+              @click="openFile(memo)"
             >
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
               </svg>
               Open File
-            </a>
+            </button>
           </div>
         </li>
       </ul>

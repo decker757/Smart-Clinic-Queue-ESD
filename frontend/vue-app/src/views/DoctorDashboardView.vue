@@ -38,7 +38,6 @@ const showPatientModal = ref(false)
 // ─── Consultation form ────────────────────────────────────────────────────────
 const showConsultationModal = ref(false)
 const consultationDone = ref(false)
-const paymentLink = ref(null)
 const consultForm = ref({
   diagnosis: '',
   consultationNotes: '',
@@ -61,7 +60,7 @@ const greeting = computed(() => {
 })
 
 const firstName = computed(() => {
-  const name = (authStore.user?.name ?? '').replace(/^Dr\.\s*/i, '')
+  const name = (authStore.user?.name ?? '').replace(/^Dr\.?\s*/i, '')
   return name.split(' ')[0] || 'Doctor'
 })
 
@@ -136,7 +135,6 @@ async function handleCallNext() {
 
 function openConsultationModal() {
   consultForm.value = { diagnosis: '', consultationNotes: '', prescribedMedication: '', issueMc: false, mcDays: '', mcStartDate: '', mcReason: '' }
-  paymentLink.value = null
   consultationDone.value = false
   actionError.value = ''
   showConsultationModal.value = true
@@ -149,7 +147,7 @@ async function handleComplete() {
   completeLoading.value = true
   try {
     const f = consultForm.value
-    const result = await completeConsultation({
+    await completeConsultation({
       appointmentId: currentPatient.value.appointment_id,
       patientId: currentPatient.value.patient_id,
       doctorId: authStore.user?.id,
@@ -160,7 +158,6 @@ async function handleComplete() {
       mcStartDate: f.issueMc ? f.mcStartDate : null,
       mcReason: f.issueMc ? f.mcReason : null,
     })
-    paymentLink.value = result.payment_link ?? null
     consultationDone.value = true
     actionSuccess.value = 'Consultation completed!'
     currentPatient.value = null
@@ -222,7 +219,7 @@ onUnmounted(() => {
           </span>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-sm text-slate-500 hidden sm:inline">Dr. {{ (authStore.user?.name ?? '').replace(/^Dr\.\s*/i, '') }}</span>
+          <span class="text-sm text-slate-500 hidden sm:inline">Dr. {{ (authStore.user?.name ?? '').replace(/^Dr\.?\s*/i, '') }}</span>
           <button
             type="button"
             class="flex items-center gap-1.5 text-sm text-slate-500 hover:text-text transition-colors duration-150 cursor-pointer"
@@ -507,7 +504,7 @@ onUnmounted(() => {
             </svg>
             <p class="text-sm font-semibold text-emerald-700">Consultation completed successfully.</p>
           </div>
-          <p class="text-sm text-slate-500">Payment link has been sent to the patient via SMS.</p>
+          <p class="text-sm text-slate-500">Staff will review the prescription and finalise billing.</p>
           <AppButton variant="secondary" @click="showConsultationModal = false">Close</AppButton>
         </div>
 

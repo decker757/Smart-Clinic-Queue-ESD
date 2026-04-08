@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { apiError } from '@/utils/api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -30,7 +31,7 @@ export function useStaff() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Failed to check in patient')
+      throw new Error(apiError(body, 'Failed to check in patient'))
     }
     return res.json()
   }
@@ -45,7 +46,7 @@ export function useStaff() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Failed to mark no-show')
+      throw new Error(apiError(body, 'Failed to mark no-show'))
     }
     return res.json()
   }
@@ -57,7 +58,7 @@ export function useStaff() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Failed to deprioritize patient')
+      throw new Error(apiError(body, 'Failed to deprioritize patient'))
     }
     return res.json()
   }
@@ -72,7 +73,7 @@ export function useStaff() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Failed to remove from queue')
+      throw new Error(apiError(body, 'Failed to remove from queue'))
     }
     return res.json()
   }

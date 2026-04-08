@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -13,6 +13,8 @@ RUN python -m grpc_tools.protoc \
     --python_out=. \
     --grpc_python_out=. \
     src/proto/patient.proto
+
+ENV PYTHONPATH=/app
 
 EXPOSE 8001
 

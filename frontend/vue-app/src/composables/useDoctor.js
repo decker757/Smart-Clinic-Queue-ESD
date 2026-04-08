@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { apiError } from '@/utils/api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -52,7 +53,7 @@ export function useDoctor() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'No patients in queue')
+      throw new Error(apiError(body, 'No patients in queue'))
     }
     return res.json()
   }
@@ -78,7 +79,7 @@ export function useDoctor() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.detail ?? 'Failed to complete consultation')
+      throw new Error(apiError(body, 'Failed to complete consultation'))
     }
     return res.json()
   }

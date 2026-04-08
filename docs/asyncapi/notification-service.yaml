@@ -1,0 +1,257 @@
+asyncapi: 2.6.0
+
+info:
+  title: Notification Service — AMQP API
+  version: 1.0.0
+  description: |
+    Consumes clinic lifecycle events from the `clinic.events` topic exchange and
+    sends SMS notifications to patients via Twilio. Binds a single durable queue
+    (`notification-service.events`) with wildcards covering `appointment.*`,
+    `queue.*`, `doctor.*`, and `consultation.*` routing keys.
+
+servers:
+  production:
+    url: '{RABBITMQ_URL}'
+    protocol: amqp
+    description: CloudAMQP hosted broker
+
+channels:
+  appointment.booked:
+    description: |
+      SMS sent to the patient confirming their appointment time and doctor (if
+      a preferred doctor was booked). Published by composite/appointment.
+    subscribe:
+      operationId: handleAppointmentBooked
+      summary: Appointment confirmed — send booking confirmation SMS
+      message:
+        $ref: '#/components/messages/AppointmentBooked'
+
+  appointment.cancelled:
+    description: |
+      SMS sent to the patient notifying them that their appointment has been
+      cancelled. Published by composite/cancellation.
+    subscribe:
+      operationId: handleAppointmentCancelled
+      summary: Appointment cancelled — send cancellation SMS
+      message:
+        $ref: '#/components/messages/AppointmentCancelled'
+
+  appointment.created:
+    description: |
+      SMS sent when a patient is reshuffled from a specific-doctor queue to the
+      generic queue (e.g. doctor became unavailable). Published by
+      queue-coordinator-service.
+    subscribe:
+      operationId: handleAppointmentCreated
+      summary: Patient moved to generic queue — send queue-change SMS
+      message:
+        $ref: '#/components/messages/AppointmentCreated'
+
+  queue.approaching:
+    description: |
+      SMS sent to a waiting generic-queue patient when ≤3 patients are ahead of
+      them in the queue. Prompts the patient to check in via the app within 10
+      minutes or lose their slot. Published by queue-coordinator-service.
+      Deduplicated in-process to prevent repeat SMS on consecutive queue ticks.
+    subscribe:
+      operationId: handleQueueApproaching
+      summary: Turn approaching — send check-in prompt SMS with 10-min deadline
+      message:
+        $ref: '#/components/messages/QueueEvent'
+
+  queue.checked_in:
+    description: |
+      SMS sent confirming the patient is checked in and will be notified when
+      their turn approaches. Published by composite/check-in-orchestrator.
+    subscribe:
+      operationId: handleQueueCheckedIn
+      summary: Patient checked in — send check-in confirmation SMS
+      message:
+        $ref: '#/components/messages/QueueEvent'
+
+  queue.called:
+    description: |
+      SMS sent when the doctor calls the patient (it is their turn now).
+      Published by queue-coordinator-service when a `callNext` action fires.
+    subscribe:
+      operationId: handleQueueCalled
+      summary: Patient called — send "your turn now" SMS
+      message:
+        $ref: '#/components/messages/QueueEvent'
+
+  queue.eta_alert:
+    description: |
+      SMS asking the patient if they are on their way, sent when their queue
+      position is close and their travel ETA suggests they should leave soon.
+      Published by eta-service or queue-coordinator-service.
+    subscribe:
+      operationId: handleQueueEtaAlert
+      summary: ETA alert — send "coming up soon" SMS
+      message:
+        $ref: '#/components/messages/QueueEvent'
+
+  queue.late_detected:
+    description: |
+      SMS asking the patient to confirm they are still coming, sent when their
+      travel ETA exceeds their estimated queue wait. Published by
+      composite/check-in-orchestrator.
+    subscribe:
+      operationId: handleQueueLateDetected
+      summary: Late patient detected — send confirmation-request SMS
+      message:
+        $ref: '#/components/messages/QueueEvent'
+
+  queue.deprioritized:
+    description: |
+      SMS notifying the patient they have been moved to the back of the queue
+      after confirming they are running late. Published by
+      composite/check-in-orchestrator.
+    subscribe:
+      operationId: handleQueueDeprioritized
+      summary: Patient deprioritized — send moved-to-back SMS
+      message:
+        $ref: '#/components/messages/QueueEvent'
+
+  queue.removed:
+    description: |
+      SMS notifying the patient they have been removed from the queue. Fires in
+      three cases: (1) patient explicitly responds "No" to the late-detection SMS,
+      (2) the 10-minute late-detection TTL dead-letter expires with no response,
+      (3) the 10-minute approaching-checkin TTL dead-letter expires (generic queue
+      patient did not check in after being notified). Deduped in-process to
+      prevent double SMS.
+    subscribe:
+      operationId: handleQueueRemoved
+      summary: Patient removed from queue — send removal SMS
+      message:
+        $ref: '#/components/messages/QueueRemovedEvent'
+
+  doctor.unavailable:
+    description: |
+      SMS offering the patient three options (join generic queue / wait for
+      doctor / reschedule) when their booked doctor becomes unavailable.
+      Published by doctor-service or queue-coordinator-service.
+    subscribe:
+      operationId: handleDoctorUnavailable
+      summary: Doctor unavailable — send options SMS
+      message:
+        $ref: '#/components/messages/DoctorUnavailable'
+
+  consultation.completed:
+    description: |
+      SMS sent after a consultation ends. If a Stripe payment link is provided,
+      the SMS includes the link for the patient to complete payment. Published by
+      composite/consultation.
+    subscribe:
+      operationId: handleConsultationCompleted
+      summary: Consultation complete — send completion/payment SMS
+      message:
+        $ref: '#/components/messages/ConsultationCompleted'
+
+components:
+  messages:
+    AppointmentBooked:
+      name: AppointmentBooked
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          start_time:
+            type: string
+            format: date-time
+            nullable: true
+            description: Appointment start time (ISO 8601). Used to format SGT time in SMS.
+          session:
+            type: string
+            nullable: true
+            description: Session label (e.g. "morning") used as fallback when start_time is absent
+          doctor_name:
+            type: string
+            nullable: true
+            description: Doctor's display name, omitted for no-preference bookings
+
+    AppointmentCancelled:
+      name: AppointmentCancelled
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+
+    AppointmentCreated:
+      name: AppointmentCreated
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+
+    QueueEvent:
+      name: QueueEvent
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          appointment_id:
+            type: string
+            nullable: true
+            description: Appointment UUID (present in most queue events)
+
+    QueueRemovedEvent:
+      name: QueueRemovedEvent
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id, appointment_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          appointment_id:
+            type: string
+            description: Appointment UUID — used for in-process deduplication to prevent double SMS
+
+    DoctorUnavailable:
+      name: DoctorUnavailable
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          doctor_name:
+            type: string
+            nullable: true
+            description: Doctor's display name. Falls back to "Your doctor" if absent.
+
+    ConsultationCompleted:
+      name: ConsultationCompleted
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          payment_link:
+            type: string
+            format: uri
+            nullable: true
+            description: Stripe Checkout URL. If present, included in the SMS. Absent if payment creation failed.

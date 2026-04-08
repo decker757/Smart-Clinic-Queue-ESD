@@ -3,6 +3,7 @@ import * as AppointmentHandlers from "../handlers/appointment";
 import * as QueueHandlers from "../handlers/queue";
 import * as DoctorHandlers from "../handlers/doctor";
 import * as ConsultationHandlers from "../handlers/consultation";
+import * as PaymentHandlers from "../handlers/payment";
 
 const EXCHANGE = "clinic.events";
 const QUEUE_NAME = "notification-service.events";
@@ -11,6 +12,7 @@ const HANDLERS: Record<string, (payload: any) => Promise<void>> = {
     "appointment.booked":    AppointmentHandlers.handleAppointmentBooked,
     "appointment.cancelled": AppointmentHandlers.handleAppointmentCancelled,
     "appointment.created":   AppointmentHandlers.handleAppointmentCreated,
+    "queue.approaching":     QueueHandlers.handleApproaching,
     "queue.checked_in":      QueueHandlers.handleCheckedIn,
     "queue.late_detected":   QueueHandlers.handleLateDetected,
     "queue.deprioritized":   QueueHandlers.handleDeprioritized,
@@ -19,6 +21,8 @@ const HANDLERS: Record<string, (payload: any) => Promise<void>> = {
     "queue.eta_alert":       QueueHandlers.handleEtaAlert,
     "doctor.unavailable":        DoctorHandlers.handleDoctorUnavailable,
     "consultation.completed":    ConsultationHandlers.handleConsultationCompleted,
+    "payment.link_created":      PaymentHandlers.handlePaymentLinkCreated,
+    "payment.completed":         PaymentHandlers.handlePaymentCompleted,
 };
 
 export async function startConsumer(): Promise<void> {
@@ -28,13 +32,27 @@ export async function startConsumer(): Promise<void> {
     const connection = await amqp.connect(url);
     const channel = await connection.createChannel();
 
-    await channel.assertExchange(EXCHANGE, "topic", { durable: true});
-    await channel.assertQueue(QUEUE_NAME, { durable: true });
+    await channel.assertExchange(EXCHANGE, "topic", { durable: true });
+
+    // Dead-letter exchange: failed messages go here for inspection/replay
+    const DLX = "clinic.events.dlx";
+    const DLQ = `${QUEUE_NAME}.dlq`;
+    await channel.assertExchange(DLX, "topic", { durable: true });
+    await channel.assertQueue(DLQ, { durable: true });
+    await channel.bindQueue(DLQ, DLX, "#");
+
+    await channel.assertQueue(QUEUE_NAME, {
+        durable: true,
+        arguments: {
+            "x-dead-letter-exchange": DLX,
+        },
+    });
     
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "appointment.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "queue.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "doctor.*");
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, "consultation.*");
+    await channel.bindQueue(QUEUE_NAME, EXCHANGE, "payment.*");
 
     console.log(`[RabbitMQ] Notification service listening on ${QUEUE_NAME}`);
 

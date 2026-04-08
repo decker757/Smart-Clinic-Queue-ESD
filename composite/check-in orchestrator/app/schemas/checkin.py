@@ -9,7 +9,7 @@ class Location(BaseModel):
 class CheckInRequest(BaseModel):
     patient_id: str
     appointment_id: str
-    appointment_time: datetime
+    appointment_time: Optional[datetime] = None
     patient_location: Location
     clinic_location: Location
 
@@ -23,3 +23,4 @@ class ConfirmRequest(BaseModel):
     patient_id: str
     appointment_id: str
     is_coming: bool
+    eta_minutes: Optional[int] = None

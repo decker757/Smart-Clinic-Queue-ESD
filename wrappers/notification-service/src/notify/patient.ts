@@ -18,6 +18,14 @@ const patientClient = new proto.patient.PatientService(
     grpc.credentials.createInsecure()
 );
 
+// Close the gRPC channel on process shutdown to prevent connection pool exhaustion
+function closeClient() {
+    patientClient.close();
+    console.log("[gRPC] Patient client connection closed");
+}
+process.on("SIGTERM", closeClient);
+process.on("SIGINT", closeClient);
+
 export async function getPatientPhone(patient_id: string): Promise<string | null> {
     return new Promise((resolve) => {
         patientClient.GetPatient({ id: patient_id }, (err: any, response: any) => {

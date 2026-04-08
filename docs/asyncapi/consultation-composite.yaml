@@ -1,0 +1,50 @@
+asyncapi: 2.6.0
+
+info:
+  title: Consultation Composite Service — AMQP API
+  version: 1.0.0
+  description: |
+    Publishes a `consultation.completed` event after a doctor marks a
+    consultation as done. Downstream services use this event for queue cleanup,
+    patient notifications, payment processing, and activity logging.
+
+servers:
+  production:
+    url: '{RABBITMQ_URL}'
+    protocol: amqp
+    description: CloudAMQP hosted broker
+
+channels:
+  consultation.completed:
+    description: |
+      Published after all synchronous steps succeed: patient record updated,
+      appointment status set to completed, queue entry removed, and payment
+      request created. Triggers downstream notification and activity logging.
+    publish:
+      operationId: onConsultationCompleted
+      summary: Consultation completed — triggers payment and notification
+      message:
+        $ref: '#/components/messages/ConsultationCompleted'
+
+components:
+  messages:
+    ConsultationCompleted:
+      name: ConsultationCompleted
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, patient_id, doctor_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          doctor_id:
+            type: string
+            description: BetterAuth nanoid of the doctor
+          payment_link:
+            type: string
+            nullable: true
+            description: Stripe payment link URL (null if payment creation failed)

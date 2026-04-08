@@ -9,6 +9,9 @@ class Settings:
     APPOINTMENT_SERVICE_URL: str = os.getenv(
         "APPOINTMENT_SERVICE_URL", "http://appointment-service:3001"
     )
+    PAYMENT_SERVICE_URL: str = os.getenv(
+        "PAYMENT_SERVICE_URL", "http://payment-service:3008"
+    )
     PATIENT_SERVICE_GRPC: str = os.getenv(
         "PATIENT_SERVICE_GRPC", "patient-service:50053"
     )
@@ -18,15 +21,13 @@ class Settings:
     QUEUE_SERVICE_GRPC: str = os.getenv(
         "QUEUE_SERVICE_GRPC", "queue-coordinator-service:50052"
     )
-
-    # ── Wrapper service URLs ─────────────────────────────────
-    PAYMENT_SERVICE_GRPC: str = os.getenv(
-        "PAYMENT_SERVICE_GRPC", "stripe-service:50051"
+    STRIPE_SERVICE_GRPC: str = os.getenv(
+        "STRIPE_SERVICE_GRPC", "stripe-service:50051"
     )
 
     # ── Auth ─────────────────────────────────────────────────
     JWKS_URL: str = os.getenv(
-        "JWKS_URL", "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json"
+        "JWKS_URL", "http://auth-service:3000/api/auth/jwks"
     )
 
     # ── Messaging ────────────────────────────────────────────

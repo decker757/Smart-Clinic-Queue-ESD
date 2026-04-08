@@ -2,6 +2,10 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage, Server } from "http";
 import pool from "../db/db";
 import { decodeJwtPayload } from "../utils/jwt";
+import { markApproachingNotified } from "../service/Queue";
+import { publishApproaching, publishApproachingWithTtl } from "../messaging/publisher";
+
+const NOTIFY_THRESHOLD = 3; // notify when this many patients are ahead
 
 // Map of appointment_id → set of connected WebSocket clients (patients)
 const subscriptions = new Map<string, Set<WebSocket>>();
@@ -9,6 +13,9 @@ const subscriptions = new Map<string, Set<WebSocket>>();
 // Set of connected staff clients — receive all queue updates
 const staffClients = new Set<WebSocket>();
 
+// Roles allowed to connect to the staff WebSocket feed.
+// Maps to Cognito custom:role claim. "nurse" is intentionally excluded
+// as nurses use the patient-facing queue view in the current workflow.
 const STAFF_ROLES = new Set(["staff", "doctor", "admin"]);
 
 // Both WSS instances use noServer:true so we can route upgrade events manually.
@@ -74,7 +81,7 @@ patientWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
             const { rows } = await pool.query(`
                 SELECT e.*,
                     (SELECT COUNT(*) FROM queue.queue_entries a
-                     WHERE a.queue_number < e.queue_number
+                     WHERE COALESCE(a.sort_key, a.queue_number * 1000) < COALESCE(e.sort_key, e.queue_number * 1000)
                        AND a.status NOT IN ('done', 'cancelled')
                        AND (
                          (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
@@ -107,6 +114,11 @@ patientWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
         ws.on("error", (err) => {
             console.error(`[WS] Error for appointment ${appointmentId}:`, err.message);
+            // Clean up subscription on error (mirrors the close handler)
+            subscriptions.get(appointmentId)?.delete(ws);
+            if (subscriptions.get(appointmentId)?.size === 0) {
+                subscriptions.delete(appointmentId);
+            }
         });
     } catch (e) {
         console.error("[WS] Unexpected error in connection handler:", e);
@@ -146,6 +158,7 @@ staffWss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
         ws.on("error", (err) => {
             console.error("[WS:staff] Error:", err.message);
+            staffClients.delete(ws);
         });
     } catch (e) {
         console.error("[WS:staff] Unexpected error:", e);
@@ -202,17 +215,18 @@ async function getActiveQueueWithEta() {
     const { rows } = await pool.query(`
         SELECT e.*,
             (SELECT COUNT(*) FROM queue.queue_entries a
-             WHERE a.queue_number < e.queue_number
+             WHERE COALESCE(a.sort_key, a.queue_number * 1000) < COALESCE(e.sort_key, e.queue_number * 1000)
                AND a.status NOT IN ('done', 'cancelled')
                AND (
                  (e.doctor_id IS NOT NULL AND a.doctor_id = e.doctor_id)
                  OR
                  (e.doctor_id IS NULL AND a.session = e.session AND a.doctor_id IS NULL)
                )
-            ) AS active_ahead
+            ) AS active_ahead,
+            e.approaching_notified_at
         FROM queue.queue_entries e
         WHERE e.status NOT IN ('done', 'cancelled')
-        ORDER BY e.queue_number ASC
+        ORDER BY COALESCE(e.sort_key, e.queue_number * 1000) ASC, e.queue_number ASC
     `);
     for (const row of rows) {
         if (!row.estimated_time) {
@@ -246,6 +260,32 @@ export async function broadcastAllPatientPositions(): Promise<void> {
         const staffPayload = JSON.stringify({ type: "snapshot", entries: rows });
         for (const ws of staffClients) {
             if (ws.readyState === WebSocket.OPEN) ws.send(staffPayload);
+        }
+    }
+
+    // Notify waiting generic-queue patients who are within NOTIFY_THRESHOLD positions.
+    // Fire-and-forget: failures here must not break the broadcast.
+    for (const row of rows) {
+        if (
+            row.status === "waiting" &&
+            row.session !== null &&          // generic queue only (no specific doctor slot)
+            row.approaching_notified_at === null &&
+            Number(row.active_ahead) <= NOTIFY_THRESHOLD
+        ) {
+            // Only mark as notified if the broker actually accepted the message —
+            // a silent no-op (channel down) must not permanently suppress the reminder.
+            const payload = {
+                patient_id: row.patient_id,
+                appointment_id: row.appointment_id,
+            };
+            // Call both independently — do not short-circuit with ||.
+            const p1 = publishApproaching(payload);
+            const p2 = publishApproachingWithTtl(payload);
+            if (p1 || p2) {
+                markApproachingNotified(row.appointment_id).catch(
+                    (e) => console.error("[Approaching] Failed to mark notified:", e)
+                );
+            }
         }
     }
 }

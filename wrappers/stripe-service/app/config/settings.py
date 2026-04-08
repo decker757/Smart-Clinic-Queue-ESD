@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     STRIPE_API_KEY: str
     STRIPE_WEBHOOK_SIGNING_SECRET: str = ""
 
-    FRONTEND_BASE_URL: str = "http://localhost:3000"
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
     STRIPE_SUCCESS_URL: str = ""
     STRIPE_CANCEL_URL: str = ""
 

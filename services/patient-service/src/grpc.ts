@@ -80,11 +80,12 @@ async function GetHistory(call: any, callback: any) {
 
 async function AddHistory(call: any, callback: any) {
     try {
-        const { patient_id, diagnosis, diagnosed_at, notes } = call.request;
+        const { patient_id, diagnosis, diagnosed_at, notes, appointment_id } = call.request;
         const entry = await HistoryService.addHistory(patient_id, {
             diagnosis,
             diagnosed_at: diagnosed_at || undefined,
             notes: notes || undefined,
+            appointment_id: appointment_id || undefined,
         });
         callback(null, {
             ...entry,

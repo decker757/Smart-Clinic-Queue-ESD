@@ -21,6 +21,11 @@ const history = ref(null)
 const payments = ref(null)
 const detailLoading = ref(false)
 
+function formatCents(cents, currency = 'SGD') {
+  if (cents == null) return ''
+  return `$${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`
+}
+
 const STATUS_LABEL = {
   scheduled:   'Upcoming',
   checked_in:  'Checked In',
@@ -28,6 +33,12 @@ const STATUS_LABEL = {
   completed:   'Completed',
   cancelled:   'Cancelled',
   no_show:     'No Show',
+}
+
+const PAYMENT_BADGE = {
+  paid:    { label: 'Paid',    cls: 'bg-green-50 text-green-700' },
+  pending: { label: 'Unpaid',  cls: 'bg-amber-50 text-amber-700' },
+  failed:  { label: 'Failed',  cls: 'bg-red-50 text-red-600' },
 }
 
 const STATUS_CLASS = {
@@ -80,18 +91,17 @@ function historyByAppt(appt) {
   })
 }
 
-async function loadDetail() {
-  if (memos.value !== null) return  // already fetched
+async function loadDetail(force = false) {
+  if (memos.value !== null && !force) return  // already fetched
   detailLoading.value = true
   const pid = authStore.user?.id
-  const [memoRes, histRes, payRes] = await Promise.all([
+  // Payments are already fetched in loadAll(); only fetch memos + history here
+  const [memoRes, histRes] = await Promise.all([
     fetch(`${API_BASE}/api/composite/patients/${pid}/memos`, { headers: authHeaders() }),
     fetch(`${API_BASE}/api/composite/patients/${pid}/history`, { headers: authHeaders() }),
-    fetch(`${API_BASE}/api/composite/patients/${pid}/payments`, { headers: authHeaders() }),
   ])
   memos.value = memoRes.ok ? ((await memoRes.json()) ?? []) : []
   history.value = histRes.ok ? ((await histRes.json()) ?? []) : []
-  payments.value = payRes.ok ? ((await payRes.json()) ?? []) : []
   detailLoading.value = false
 }
 
@@ -154,14 +164,16 @@ async function loadAll() {
   error.value = ''
   const pid = authStore.user?.id
   try {
-    const res = await fetch(
-      `${API_BASE}/api/composite/appointments?patient_id=${pid}`,
-      { headers: authHeaders() },
-    )
-    if (!res.ok) throw new Error('Failed to load appointments')
-    appointments.value = ((await res.json()) ?? []).sort(
+    // Fetch appointments and payments in parallel so payment badges render immediately
+    const [apptRes, payRes] = await Promise.all([
+      fetch(`${API_BASE}/api/composite/appointments?patient_id=${pid}`, { headers: authHeaders() }),
+      fetch(`${API_BASE}/api/composite/patients/${pid}/payments`, { headers: authHeaders() }),
+    ])
+    if (!apptRes.ok) throw new Error('Failed to load appointments')
+    appointments.value = ((await apptRes.json()) ?? []).sort(
       (a, b) => new Date(b.created_at) - new Date(a.created_at),
     )
+    payments.value = payRes.ok ? ((await payRes.json()) ?? []) : []
   } catch (e) {
     error.value = e.message ?? 'Could not load appointment history.'
   } finally {
@@ -171,6 +183,10 @@ async function loadAll() {
 
 onMounted(() => {
   if (!authStore.user?.id) { router.push('/login'); return }
+  // Reset cached detail so fresh data is loaded when an appointment is expanded
+  memos.value = null
+  history.value = null
+  payments.value = null
   loadAll()
 })
 </script>
@@ -243,6 +259,13 @@ onMounted(() => {
               </p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
+              <span
+                v-if="paymentByAppt(appt)"
+                class="text-xs font-medium px-2.5 py-1 rounded-full"
+                :class="PAYMENT_BADGE[paymentByAppt(appt).status]?.cls ?? 'bg-slate-100 text-slate-500'"
+              >
+                {{ PAYMENT_BADGE[paymentByAppt(appt).status]?.label ?? 'Payment' }}
+              </span>
               <span
                 class="text-xs font-medium px-2.5 py-1 rounded-full"
                 :class="STATUS_CLASS[appt.status] ?? 'bg-slate-100 text-slate-500'"
@@ -334,6 +357,7 @@ onMounted(() => {
                     }"
                   >
                     {{ paymentByAppt(appt).status === 'paid' ? 'Paid' : paymentByAppt(appt).status === 'pending' ? 'Payment Pending' : 'Payment Failed' }}
+                    <span v-if="paymentByAppt(appt).amount_cents" class="ml-1 text-slate-500 font-normal">· {{ formatCents(paymentByAppt(appt).amount_cents, paymentByAppt(appt).currency) }}</span>
                   </span>
                   <button
                     v-if="paymentByAppt(appt).status !== 'paid'"

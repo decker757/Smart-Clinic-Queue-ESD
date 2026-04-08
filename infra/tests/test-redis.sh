@@ -14,10 +14,10 @@
 BASE=${1:-local}
 
 if [ "$BASE" = "local" ]; then
-  # Bypass Kong — hit services directly
+  # Local verification should follow the same path users hit: Kong routes.
   BASE_AUTH="http://localhost:3000/api/auth"
-  BASE_COMPOSITE="http://localhost:8080/api/composite"
-  BASE_QUEUE="http://localhost:3002/api/queue"
+  BASE_COMPOSITE="http://localhost:8000/api/composite"
+  BASE_QUEUE="http://localhost:8000/api/queue"
 else
   # Production — go through Kong
   BASE_AUTH="${BASE}/api/auth"
@@ -45,6 +45,28 @@ latency() {
 
 pass() { echo "  PASS: $1"; }
 fail() { echo "  FAIL: $1"; }
+
+wait_for_code() {
+  URL=$1
+  JWT=$2
+  EXPECTED=$3
+  LABEL=$4
+  CODE="000"
+  for _ in $(seq 1 30); do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" \
+      -H "Authorization: Bearer $JWT")
+    if [ "$CODE" = "$EXPECTED" ]; then
+      break
+    fi
+    sleep 2
+  done
+  if [ "$CODE" = "$EXPECTED" ]; then
+    pass "$LABEL"
+  else
+    echo "ERROR: $LABEL (last HTTP $CODE)"
+    exit 1
+  fi
+}
 
 check_faster() {
   FIRST=$1
@@ -80,7 +102,11 @@ JWT=$(curl -sf "$BASE_AUTH/token" \
   -H "Authorization: Bearer $SESSION_TOKEN" | jq -r '.token')
 echo "JWT acquired."
 
-# queue-coordinator has no auth middleware locally — JWT header still sent for consistency
+echo ""
+echo "=== 3b. Wait for Kong routes ==="
+wait_for_code "$BASE_COMPOSITE/appointments/openapi.json" "$JWT" "200" "Composite appointment route ready"
+wait_for_code "$BASE_QUEUE/openapi.json" "$JWT" "200" "Queue route reachable through Kong"
+
 AUTH_HEADER="Authorization: Bearer $JWT"
 
 # ─── Setup ───────────────────────────────────────────────────

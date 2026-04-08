@@ -4,8 +4,18 @@ from app.config.settings import settings
 stripe.api_key = settings.STRIPE_API_KEY
 
 
-def create_checkout_session(amount: int, currency: str, consultation_id: str, patient_id: str):
-    return stripe.checkout.Session.create(
+def create_checkout_session(
+    amount: int,
+    currency: str,
+    consultation_id: str,
+    patient_id: str,
+    idempotency_key: str | None = None,
+):
+    metadata = {
+        "consultation_id": consultation_id,
+        "patient_id": patient_id,
+    }
+    kwargs: dict = dict(
         payment_method_types=["card"],
         line_items=[{
             "price_data": {
@@ -18,22 +28,9 @@ def create_checkout_session(amount: int, currency: str, consultation_id: str, pa
         mode="payment",
         success_url=settings.STRIPE_SUCCESS_URL or f"{settings.FRONTEND_BASE_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=settings.STRIPE_CANCEL_URL or f"{settings.FRONTEND_BASE_URL}/cancel",
-        metadata={
-            "consultation_id": consultation_id,
-            "patient_id": patient_id,
-        },
+        metadata=metadata,
+        payment_intent_data={"metadata": metadata},
     )
-
-
-async def handle_create_payment(payload: dict) -> dict:
-    session = create_checkout_session(
-        amount=payload["amount"],
-        currency=payload["currency"],
-        consultation_id=payload["consultation_id"],
-        patient_id=payload["patient_id"],
-    )
-    return {
-        "payment_url": session.url,
-        "payment_intent_id": session.payment_intent,
-        "status": "pending",
-    }
+    if idempotency_key:
+        kwargs["idempotency_key"] = idempotency_key
+    return stripe.checkout.Session.create(**kwargs)

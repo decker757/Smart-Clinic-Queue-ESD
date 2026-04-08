@@ -4,7 +4,7 @@ import * as crypto from "crypto";
 let publicKey: crypto.KeyObject | null = null;
 
 export async function fetchPublicKey(retries = 10, delayMs = 3000): Promise<void> {
-    const url = process.env.JWKS_URL ?? "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json";
+    const url = process.env.JWKS_URL ?? "http://auth-service:3000/api/auth/jwks";
 
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
@@ -61,5 +61,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     }
 
     (req as any).callerId = payload.sub;
+    // Store role for requireStaff checks. Supports both BetterAuth ("role") and
+    // Cognito ("custom:role") claim names.
+    (req as any).callerRole = (payload["custom:role"] ?? payload["role"] ?? "") as string;
+    next();
+}
+
+export function requireStaff(req: Request, res: Response, next: NextFunction) {
+    const role = (req as any).callerRole as string | undefined;
+    if (!role || !["staff", "doctor", "admin"].includes(role)) {
+        return res.status(403).json({ error: "Staff access required" });
+    }
     next();
 }

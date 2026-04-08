@@ -1,0 +1,82 @@
+asyncapi: 2.6.0
+
+info:
+  title: Stripe Payment Wrapper — AMQP API
+  version: 1.0.0
+  description: |
+    Publishes payment outcome events to the `clinic.events` topic exchange after
+    verifying and processing Stripe webhook callbacks. Downstream consumers
+    (notification-service, activity-log-service) react to these events.
+
+servers:
+  production:
+    url: '{RABBITMQ_URL}'
+    protocol: amqp
+    description: CloudAMQP hosted broker
+
+channels:
+  payment.completed:
+    description: |
+      Published when Stripe fires a `checkout.session.completed` webhook event.
+      Metadata fields (`consultation_id`, `patient_id`) are extracted from the
+      Stripe session object. Downstream notification-service sends a payment
+      confirmation SMS to the patient.
+    publish:
+      operationId: onPaymentCompleted
+      summary: Payment completed — Stripe checkout session succeeded
+      message:
+        $ref: '#/components/messages/PaymentCompleted'
+
+  payment.failed:
+    description: |
+      Published when Stripe fires a `payment_intent.payment_failed` webhook event.
+      Downstream services may notify the patient and allow retry.
+    publish:
+      operationId: onPaymentFailed
+      summary: Payment failed — Stripe payment intent rejected
+      message:
+        $ref: '#/components/messages/PaymentFailed'
+
+components:
+  messages:
+    PaymentCompleted:
+      name: PaymentCompleted
+      contentType: application/json
+      payload:
+        type: object
+        required: [consultation_id, patient_id, payment_intent_id, timestamp]
+        properties:
+          consultation_id:
+            type: string
+            description: Appointment/consultation ID from Stripe session metadata
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient from Stripe session metadata
+          payment_intent_id:
+            type: string
+            description: Stripe PaymentIntent ID
+          timestamp:
+            type: string
+            format: date-time
+            description: ISO 8601 UTC timestamp of event processing
+
+    PaymentFailed:
+      name: PaymentFailed
+      contentType: application/json
+      payload:
+        type: object
+        required: [consultation_id, patient_id, payment_intent_id, timestamp]
+        properties:
+          consultation_id:
+            type: string
+            description: Appointment/consultation ID from Stripe PaymentIntent metadata
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          payment_intent_id:
+            type: string
+            description: Stripe PaymentIntent ID that failed
+          timestamp:
+            type: string
+            format: date-time
+            description: ISO 8601 UTC timestamp of event processing

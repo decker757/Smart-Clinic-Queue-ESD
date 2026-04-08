@@ -41,7 +41,7 @@ BASE_STAFF="$BASE_KONG/api/composite/staff"
 
 DOCTOR_EMAIL="${DOCTOR_EMAIL:-doctor@clinic.com}"
 DOCTOR_PASSWORD="${DOCTOR_PASSWORD:-password123}"
-PATIENT_EMAIL="e2e-staff-$(date +%s)@test.com"
+PATIENT_EMAIL="e2e-staff-$(date +%s)-$$@test.com"
 PATIENT_PASSWORD="password123"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,6 +74,24 @@ check_code() {
   fi
 }
 
+wait_for_code() {
+  URL=$1
+  JWT=$2
+  EXPECTED=$3
+  LABEL=$4
+  CODE="000"
+
+  for _ in $(seq 1 30); do
+    CODE=$(req_code "$URL" -H "Authorization: Bearer $JWT")
+    if [ "$CODE" = "$EXPECTED" ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  [ "$CODE" = "$EXPECTED" ] || fail "$LABEL (last HTTP $CODE)"
+}
+
 # ── 1. Auth ───────────────────────────────────────────────────────────────────
 
 echo ""
@@ -94,6 +112,22 @@ DOCTOR_JWT=$(req_json "$BASE_AUTH/api/auth/token" \
   -H "Authorization: Bearer $DOCTOR_SESSION" | jq -r '.token')
 [ -z "$DOCTOR_JWT" ] || [ "$DOCTOR_JWT" = "null" ] && fail "Could not get doctor JWT"
 pass "JWT acquired"
+
+echo ""
+echo "--- Waiting for Kong staff route readiness (max 60s) ---"
+wait_for_code "$BASE_STAFF/doctors" "$DOCTOR_JWT" "200" "Kong/staff route ready"
+
+echo ""
+echo "--- Waiting for Kong patient route readiness (max 60s) ---"
+wait_for_code "$BASE_KONG/api/patients/openapi.json" "$DOCTOR_JWT" "200" "Kong/patient route ready"
+
+echo ""
+echo "--- Waiting for Kong queue route readiness (max 60s) ---"
+wait_for_code "$BASE_KONG/api/queue/openapi.json" "$DOCTOR_JWT" "200" "Kong/queue route ready"
+
+echo ""
+echo "--- Waiting for Kong composite appointment route readiness (max 60s) ---"
+wait_for_code "$BASE_KONG/api/composite/appointments/openapi.json" "$DOCTOR_JWT" "200" "Kong/composite appointment route ready"
 
 # ── 2. Doctor endpoints ───────────────────────────────────────────────────────
 
@@ -185,23 +219,24 @@ echo ""
 echo "=== 11. Reject patient JWT on staff route ==="
 CODE=$(req_code "$BASE_STAFF/doctors" \
   -H "Authorization: Bearer $PATIENT_JWT")
-check_code "$CODE" "403" "Patient JWT rejected (insufficient role)"
+check_code "$CODE" "403" "Patient JWT rejected on staff route (insufficient role)"
 
 # ── 5. Queue management ───────────────────────────────────────────────────────
 
 echo ""
+echo "=== 11b. Reset queue state for deterministic test ==="
+CODE=$(req_code -X POST "$BASE_KONG/api/queue/reset" \
+  -H "Authorization: Bearer $DOCTOR_JWT")
+check_code "$CODE" "200" "Queue reset"
+
+echo ""
 echo "=== 12. Book appointment via composite-appointment ==="
-DAYS_AHEAD=$(( ($(date +%s) / 900) % 6 + 1 ))
-HOUR=$(( 9 + ($(date +%s) / 5400) % 9 ))
-START_TIME=$(date -u -v+${DAYS_AHEAD}d "+%Y-%m-%dT$(printf '%02d' $HOUR):00:00Z" 2>/dev/null || \
-             date -u -d "+${DAYS_AHEAD} days" "+%Y-%m-%dT$(printf '%02d' $HOUR):00:00Z")
-SESSION=$(date -u -v+${DAYS_AHEAD}d "+%Y-%m-%d" 2>/dev/null || \
-          date -u -d "+${DAYS_AHEAD} days" "+%Y-%m-%d")
+SESSION="morning"
 
 APPT=$(curl -sf -X POST "$BASE_KONG/api/composite/appointments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $PATIENT_JWT" \
-  -d "{\"patient_id\":\"$PATIENT_ID\",\"doctor_id\":\"$DOCTOR_ID\",\"start_time\":\"$START_TIME\"}")
+  -d "{\"patient_id\":\"$PATIENT_ID\",\"session\":\"$SESSION\",\"notes\":\"staff-orchestrator e2e\"}")
 echo "$APPT" | jq .
 APPT_ID=$(echo "$APPT" | jq -r '.id // .appointment_id')
 [ -z "$APPT_ID" ] || [ "$APPT_ID" = "null" ] && fail "Booking failed — check composite-appointment logs"
@@ -228,7 +263,7 @@ echo "=== 15. Call next patient ==="
 CALL_RESP=$(req_json -X POST "$BASE_STAFF/queue/call-next" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $DOCTOR_JWT" \
-  -d "{\"session\":\"$SESSION\",\"doctor_id\":\"$DOCTOR_ID\"}")
+  -d "{\"session\":\"$SESSION\",\"doctor_id\":\"\"}")
 echo "$CALL_RESP" | jq .
 CALLED_APPT=$(echo "$CALL_RESP" | jq -r '.appointment_id')
 [ "$CALLED_APPT" = "$APPT_ID" ] && pass "Correct patient called next" || \
@@ -258,15 +293,10 @@ check_code "$CODE" "404" "Queue entry removed after completion"
 
 echo ""
 echo "=== 19. Book second appointment for no-show test ==="
-DAYS2=$(( DAYS_AHEAD + 1 ))
-HOUR2=$(( (HOUR + 1) % 17 + 9 ))
-START_TIME2=$(date -u -v+${DAYS2}d "+%Y-%m-%dT$(printf '%02d' $HOUR2):00:00Z" 2>/dev/null || \
-              date -u -d "+${DAYS2} days" "+%Y-%m-%dT$(printf '%02d' $HOUR2):00:00Z")
-
 APPT2=$(curl -sf -X POST "$BASE_KONG/api/composite/appointments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $PATIENT_JWT" \
-  -d "{\"patient_id\":\"$PATIENT_ID\",\"doctor_id\":\"$DOCTOR_ID\",\"start_time\":\"$START_TIME2\"}")
+  -d "{\"patient_id\":\"$PATIENT_ID\",\"session\":\"afternoon\",\"notes\":\"staff no-show e2e\"}")
 APPT_ID2=$(echo "$APPT2" | jq -r '.id // .appointment_id')
 [ -z "$APPT_ID2" ] || [ "$APPT_ID2" = "null" ] && fail "Second booking failed"
 pass "Second appointment booked (appt_id=$APPT_ID2)"
@@ -283,14 +313,10 @@ check_code "$CODE" "200" "Patient marked as no-show"
 
 echo ""
 echo "=== 21. Book third appointment for remove-from-queue test ==="
-DAYS3=$(( DAYS_AHEAD + 2 ))
-START_TIME3=$(date -u -v+${DAYS3}d "+%Y-%m-%dT$(printf '%02d' $HOUR):00:00Z" 2>/dev/null || \
-              date -u -d "+${DAYS3} days" "+%Y-%m-%dT$(printf '%02d' $HOUR):00:00Z")
-
 APPT3=$(curl -sf -X POST "$BASE_KONG/api/composite/appointments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $PATIENT_JWT" \
-  -d "{\"patient_id\":\"$PATIENT_ID\",\"doctor_id\":\"$DOCTOR_ID\",\"start_time\":\"$START_TIME3\"}")
+  -d "{\"patient_id\":\"$PATIENT_ID\",\"session\":\"morning\",\"notes\":\"staff remove e2e\"}")
 APPT_ID3=$(echo "$APPT3" | jq -r '.id // .appointment_id')
 [ -z "$APPT_ID3" ] || [ "$APPT_ID3" = "null" ] && fail "Third booking failed"
 pass "Third appointment booked (appt_id=$APPT_ID3)"

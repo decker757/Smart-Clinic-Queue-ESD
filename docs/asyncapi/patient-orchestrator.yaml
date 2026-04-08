@@ -1,0 +1,17 @@
+asyncapi: 2.6.0
+
+info:
+  title: Patient Orchestrator — AMQP API
+  version: 1.0.0
+  description: |
+    The patient orchestrator does not publish any AMQP events.
+    Patient lifecycle events (profile mutations, history, memos) are consumed
+    by the activity-log-service via direct HTTP calls from the atomic patient-service.
+
+servers:
+  production:
+    url: '{RABBITMQ_URL}'
+    protocol: amqp
+    description: CloudAMQP hosted broker
+
+channels: {}

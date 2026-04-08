@@ -1,0 +1,84 @@
+asyncapi: 2.6.0
+
+info:
+  title: Appointment Composite Service — AMQP API
+  version: 1.0.0
+  description: |
+    Publishes events to the `clinic.events` topic exchange on RabbitMQ after
+    appointment creation and cancellation. Downstream services (queue-coordinator,
+    activity-log, notification) bind their own queues to this exchange and
+    receive events independently.
+
+servers:
+  production:
+    url: '{RABBITMQ_URL}'
+    protocol: amqp
+    description: CloudAMQP hosted broker
+    variables:
+      RABBITMQ_URL:
+        description: Full AMQP connection string (set via environment variable)
+
+channels:
+  appointment.booked:
+    description: |
+      Published after a new appointment is successfully created (and the slot
+      marked booked, if a specific doctor slot was chosen).
+    publish:
+      operationId: onAppointmentBooked
+      summary: Appointment booked event
+      message:
+        $ref: '#/components/messages/AppointmentBooked'
+
+  appointment.cancelled:
+    description: |
+      Published after an appointment is cancelled by the patient.
+    publish:
+      operationId: onAppointmentCancelled
+      summary: Appointment cancelled event
+      message:
+        $ref: '#/components/messages/AppointmentCancelled'
+
+components:
+  messages:
+    AppointmentBooked:
+      name: AppointmentBooked
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, patient_id, doctor_id, start_time, session]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+            description: Unique ID of the created appointment
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          doctor_id:
+            type: string
+            nullable: true
+            description: Doctor ID (null for session-based bookings)
+          start_time:
+            type: string
+            format: date-time
+            nullable: true
+            description: Appointment start time (null for session-based bookings)
+          session:
+            type: string
+            enum: [morning, afternoon]
+            nullable: true
+            description: Session preference (null for specific-slot bookings)
+
+    AppointmentCancelled:
+      name: AppointmentCancelled
+      contentType: application/json
+      payload:
+        type: object
+        required: [appointment_id, patient_id]
+        properties:
+          appointment_id:
+            type: string
+            format: uuid
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient

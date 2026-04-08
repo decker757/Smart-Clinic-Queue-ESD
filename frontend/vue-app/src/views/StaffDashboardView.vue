@@ -67,6 +67,14 @@ function statusBadge(status) {
   return STATUS_BADGE[status] ?? { label: status, classes: 'bg-slate-100 text-slate-500', accent: 'bg-slate-300' }
 }
 
+function queueSortValue(entry) {
+  return entry?.sort_key ?? (entry?.queue_number ?? 0) * 1000
+}
+
+function compareQueueEntries(a, b) {
+  return queueSortValue(a) - queueSortValue(b) || (a.queue_number ?? 0) - (b.queue_number ?? 0)
+}
+
 function etaMinutes(entry) {
   // Use server-computed estimated_time if available; otherwise derive from local queue state
   if (entry.estimated_time) {
@@ -74,7 +82,14 @@ function etaMinutes(entry) {
     return diff > 0 ? Math.round(diff / 60000) : 0
   }
   const activeAhead = queue.value.filter(
-    (e) => e.queue_number < entry.queue_number && !['done', 'cancelled'].includes(e.status),
+    (e) => (
+      !TERMINAL.has(e.status)
+      && queueSortValue(e) < queueSortValue(entry)
+      && (
+        (entry.doctor_id && e.doctor_id === entry.doctor_id)
+        || (!entry.doctor_id && e.session === entry.session && !e.doctor_id)
+      )
+    ),
   ).length
   return activeAhead * 15
 }
@@ -102,7 +117,7 @@ function connectQueueSocket() {
     try {
       const msg = JSON.parse(event.data)
       if (msg.type === 'snapshot') {
-        queue.value = msg.entries ?? []
+        queue.value = [...(msg.entries ?? [])].sort(compareQueueEntries)
         loading.value = false
       } else if (msg.type === 'update') {
         const entry = msg.entry
@@ -110,8 +125,10 @@ function connectQueueSocket() {
           queue.value = queue.value.filter((q) => q.appointment_id !== entry.appointment_id)
         } else {
           const idx = queue.value.findIndex((q) => q.appointment_id === entry.appointment_id)
-          if (idx !== -1) queue.value[idx] = entry
-          else queue.value = [...queue.value, entry].sort((a, b) => a.queue_number - b.queue_number)
+          const nextQueue = [...queue.value]
+          if (idx !== -1) nextQueue[idx] = entry
+          else nextQueue.push(entry)
+          queue.value = nextQueue.sort(compareQueueEntries)
         }
       }
     } catch {

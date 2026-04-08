@@ -53,7 +53,7 @@ async function submit() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.error ?? 'Failed to save profile')
+      throw new Error(body.detail ?? body.error ?? 'Failed to save profile')
     }
     emit('complete')
   } catch (e) {

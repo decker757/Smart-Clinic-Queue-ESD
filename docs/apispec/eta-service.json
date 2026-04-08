@@ -1,0 +1,97 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ETA Service (gRPC)",
+    "version": "1.0.0",
+    "description": "gRPC-only service. Wraps the Google Maps Distance Matrix API to return travel time estimates between two coordinates. Exposed on port 50054 (env: `GRPC_PORT`). There are no HTTP endpoints — the paths below represent gRPC RPCs using the standard gRPC-over-HTTP/2 URI convention (`/<package>.<Service>/<Method>`).\n\n**Proto package:** `eta`  \n**Service:** `ETAService`  \n**Transport mode priority:** transit → walking → stub (if no Google Maps key)"
+  },
+  "paths": {
+    "/eta.ETAService/GetTravelTime": {
+      "post": {
+        "summary": "GetTravelTime",
+        "description": "Returns the estimated travel time in minutes between an origin and destination coordinate pair. Tries Google Maps transit routing first; falls back to walking; falls back to a configurable stub value if `GOOGLE_MAPS_API_KEY` is not set.",
+        "tags": ["ETA (gRPC)"],
+        "x-grpc-method": "GetTravelTime",
+        "x-grpc-service": "eta.ETAService",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/grpc": {
+              "schema": {
+                "$ref": "#/components/schemas/TravelTimeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Travel time calculated successfully",
+            "content": {
+              "application/grpc": {
+                "schema": {
+                  "$ref": "#/components/schemas/TravelTimeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "gRPC INVALID_ARGUMENT — one or more coordinates are missing"
+          },
+          "500": {
+            "description": "gRPC INTERNAL — Google Maps API error or unexpected failure"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TravelTimeRequest": {
+        "type": "object",
+        "required": ["origin_lat", "origin_lng", "dest_lat", "dest_lng"],
+        "properties": {
+          "origin_lat": {
+            "type": "number",
+            "format": "double",
+            "description": "Latitude of the origin (patient location)"
+          },
+          "origin_lng": {
+            "type": "number",
+            "format": "double",
+            "description": "Longitude of the origin (patient location)"
+          },
+          "dest_lat": {
+            "type": "number",
+            "format": "double",
+            "description": "Latitude of the destination (clinic). Set via `CLINIC_LAT` env var on the caller side."
+          },
+          "dest_lng": {
+            "type": "number",
+            "format": "double",
+            "description": "Longitude of the destination (clinic). Set via `CLINIC_LNG` env var on the caller side."
+          }
+        }
+      },
+      "TravelTimeResponse": {
+        "type": "object",
+        "properties": {
+          "travel_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Estimated travel time in minutes"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["transit", "walking", "stub"],
+            "description": "Transport mode used to calculate the estimate"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["google_maps", "stub"],
+            "description": "Data source used. `stub` indicates Google Maps was unavailable or not configured."
+          }
+        }
+      }
+    }
+  }
+}
