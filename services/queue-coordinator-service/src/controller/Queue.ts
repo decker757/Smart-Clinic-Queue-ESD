@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import * as QueueService from "../service/Queue";
 import { broadcastQueueUpdate, broadcastAllPatientPositions } from "../ws/manager";
 import { callerIdFromAuthHeader } from "../utils/jwt";
+import { publishEvent } from "../messaging/publisher";
 
 const router = Router();
 
@@ -99,6 +100,12 @@ router.post("/call-next", async (req: Request, res: Response) => {
         }
         const next = await QueueService.callNext(session, doctor_id);
         broadcastQueueUpdate(next.appointment_id, next);
+        publishEvent("queue.called", {
+            appointment_id: next.appointment_id,
+            patient_id: next.patient_id,
+            doctor_id: next.doctor_id,
+            queue_number: next.queue_number,
+        });
         res.json(next);
         broadcastAllPatientPositions().catch(() => {});
     } catch (e: any) {

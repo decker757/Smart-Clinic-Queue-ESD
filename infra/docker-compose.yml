@@ -317,9 +317,21 @@ services:
       - "50060:50051" # gRPC (internal calls from composite/consultation)
     env_file:
       - ./env/stripe-service.env
+    environment:
+      SKIP_WEBHOOK_VERIFICATION: "true"
     depends_on:
       rabbitmq:
         condition: service_healthy
+    restart: unless-stopped
+
+  stripe-cli:
+    image: stripe/stripe-cli:latest
+    entrypoint: ["sh", "-c"]
+    command: ["stripe listen --api-key $$STRIPE_API_KEY --forward-to http://stripe-service:8001/api/payments/webhook --skip-verify"]
+    env_file:
+      - ./env/stripe-service.env
+    depends_on:
+      - stripe-service
     restart: unless-stopped
 
   # ─── Frontend ───────────────────────────────────────────────

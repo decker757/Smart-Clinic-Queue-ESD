@@ -4,6 +4,10 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     STRIPE_API_KEY: str
     STRIPE_WEBHOOK_SIGNING_SECRET: str = ""
+    # Set to "true" in local dev to skip Stripe signature verification.
+    # The stripe-cli Docker service forwards events with a session-specific secret
+    # that changes on every container restart, making verification impractical locally.
+    SKIP_WEBHOOK_VERIFICATION: bool = False
 
     FRONTEND_BASE_URL: str = "http://localhost:5173"
     STRIPE_SUCCESS_URL: str = ""

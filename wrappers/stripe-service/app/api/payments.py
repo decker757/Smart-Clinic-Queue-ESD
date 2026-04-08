@@ -46,21 +46,23 @@ async def create_session(body: CreateSessionRequest):
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None, alias="stripe-signature")):
-    if not stripe_signature:
-        raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
-
     payload = await request.body()
 
-    try:
-        stripe.Webhook.construct_event(
-            payload=payload,
-            sig_header=stripe_signature,
-            secret=settings.STRIPE_WEBHOOK_SIGNING_SECRET,
-        )
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError:
-        raise HTTPException(status_code=400, detail="Invalid signature")
+    if settings.SKIP_WEBHOOK_VERIFICATION:
+        logger.warning("Webhook signature verification skipped (SKIP_WEBHOOK_VERIFICATION=true) — local dev only")
+    else:
+        if not stripe_signature:
+            raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
+        try:
+            stripe.Webhook.construct_event(
+                payload=payload,
+                sig_header=stripe_signature,
+                secret=settings.STRIPE_WEBHOOK_SIGNING_SECRET,
+            )
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid payload")
+        except stripe.error.SignatureVerificationError:
+            raise HTTPException(status_code=400, detail="Invalid signature")
 
     # Use the raw payload as a plain dict — the Stripe SDK's StripeObject
     # doesn't support .get() so we parse JSON ourselves after signature is verified.

@@ -77,7 +77,7 @@ channels:
       operationId: handleQueueCalled
       summary: Patient called — send "your turn now" SMS
       message:
-        $ref: '#/components/messages/QueueEvent'
+        $ref: '#/components/messages/QueueCalledEvent'
 
   queue.eta_alert:
     description: |
@@ -210,6 +210,27 @@ components:
             type: string
             nullable: true
             description: Appointment UUID (present in most queue events)
+
+    QueueCalledEvent:
+      name: QueueCalledEvent
+      contentType: application/json
+      payload:
+        type: object
+        required: [patient_id, appointment_id]
+        properties:
+          patient_id:
+            type: string
+            description: BetterAuth nanoid of the patient
+          appointment_id:
+            type: string
+            description: Appointment UUID
+          doctor_id:
+            type: string
+            nullable: true
+            description: Doctor's BetterAuth nanoid. Null for generic queue patients until assigned at call-next time.
+          queue_number:
+            type: integer
+            description: The patient's display queue number
 
     QueueRemovedEvent:
       name: QueueRemovedEvent

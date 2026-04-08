@@ -69,6 +69,14 @@ const router = createRouter({
       component: () => import('@/views/PatientQueueView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/success',
+      redirect: '/history',
+    },
+    {
+      path: '/cancel',
+      redirect: '/history',
+    },
   ],
 })
 

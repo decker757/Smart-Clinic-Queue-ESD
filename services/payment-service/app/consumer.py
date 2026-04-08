@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import aio_pika
@@ -32,7 +33,7 @@ async def _record_payment(status: str, payload: dict):
             INSERT INTO payments.payments
                 (consultation_id, patient_id, payment_intent_id, amount_cents, currency, status, payment_link)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (consultation_id, payment_intent_id)
+            ON CONFLICT (consultation_id, payment_intent_id) WHERE payment_intent_id IS NOT NULL
             DO UPDATE SET
                 status       = EXCLUDED.status,
                 payment_link = EXCLUDED.payment_link
@@ -48,7 +49,8 @@ async def _record_payment(status: str, payload: dict):
     logger.info("Recorded payment %s for consultation %s", status, payload.get("consultation_id"))
 
 
-async def start_consumer():
+async def _consume_once():
+    """Connect, declare topology, and consume until the connection drops."""
     connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
     channel = await connection.channel()
     exchange = await channel.declare_exchange(EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True)
@@ -67,6 +69,7 @@ async def start_consumer():
     await queue.bind(exchange, routing_key="payment.completed")
     await queue.bind(exchange, routing_key="payment.failed")
 
+    logger.info("[Consumer] Connected and consuming from payment-service.events")
     async with queue.iterator() as messages:
         async for message in messages:
             try:
@@ -82,3 +85,16 @@ async def start_consumer():
             except Exception:
                 logger.exception("Failed to process payment event — sending to DLQ")
                 await message.nack(requeue=False)
+
+
+async def start_consumer():
+    """Retry loop — restarts the consumer if setup or the connection ever fails."""
+    while True:
+        try:
+            await _consume_once()
+        except asyncio.CancelledError:
+            logger.info("[Consumer] Shutting down")
+            raise
+        except Exception as e:
+            logger.error("[Consumer] Crashed (%s), restarting in 5s…", e)
+            await asyncio.sleep(5)
