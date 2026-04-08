@@ -63,29 +63,7 @@ The solution is organized around:
 
 The production deployment uses CloudFront, API Gateway, an Application Load Balancer, ECS Fargate services, Amazon MQ, RDS PostgreSQL, and ElastiCache Redis. Internally, services communicate through a mix of synchronous HTTP/gRPC calls and asynchronous RabbitMQ events.
 
-```
-Browser / Mobile
-       │
-       ▼
-  CloudFront  (HTTPS termination, CDN)
-  ├── /*  ──────────────────────────► S3 (Vue SPA static files)
-  ├── /api/* ──────────────────────► API Gateway (HTTP API)
-  │                                        │
-  │                                   JWT Authorizer
-  │                                   (Cognito RS256)
-  │                                        │
-  │                                        ▼
-  │                                  ALB (path routing)
-  │                                        │
-  └── /api/queue/ws* ──────────────► ALB (WebSocket bypass)
-                                           │
-                                           ▼
-                                     ECS Fargate Tasks
-                                           │
-                              ┌────────────┴────────────┐
-                         gRPC (internal)         RabbitMQ events
-                     (via Cloud Map DNS)        clinic.events exchange
-```
+![Technical Overview](diagrams/TechnicalOverview.jpg)
 
 > WebSocket connections use `wss://` to CloudFront. CloudFront forwards them as `ws://` to the ALB — this handles the mixed-content restriction when the frontend is served over HTTPS.
 
@@ -255,12 +233,18 @@ The seed script also inserts the doctor into the `doctors.doctors` and `appointm
 ## Core Business Scenarios
 
 ### Scenario 1 — Patient Books Appointment
+
+![Scenario 1](diagrams/Scenario1.jpg)
+
 1. Patient signs in → receives Cognito ID token
 2. Submits booking via frontend → API Gateway validates token → `composite-appointment`
 3. `composite-appointment` calls `appointment-service` → creates appointment
 4. Publishes `appointment.booked` → `queue-coordinator` adds patient to queue
 
 ### Scenario 2 — Patient Check-In
+
+![Scenario 2](diagrams/Scenario2.jpg)
+
 1. Patient checks in via frontend (with location)
 2. `checkin-orchestrator` calls `eta-service` via gRPC for travel time
 3. On time → `queue.checked_in` → queue-coordinator updates status
@@ -269,6 +253,9 @@ The seed script also inserts the doctor into the `doctors.doctors` and `appointm
 6. Patient NO / no response (TTL 5 min) → `queue.removed` → removed from queue
 
 ### Scenario 3 — Doctor Completes Consultation
+
+![Scenario 3](diagrams/Scenario3.jpg)
+
 1. Doctor submits notes, MC, prescription via doctor dashboard
 2. `composite-consultation` (synchronously):
    - Calls `patient-service` via gRPC → stores MC + prescription
