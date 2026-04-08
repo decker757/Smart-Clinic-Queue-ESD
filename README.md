@@ -55,8 +55,8 @@ The solution is organized around:
 
 | Endpoint | URL |
 |----------|-----|
-| Frontend | `https://d2qwgyxb2qmggu.cloudfront.net` |
-| API Gateway | `https://y2noszdtvi.execute-api.ap-southeast-1.amazonaws.com` |
+| Frontend | `https://d1ny1tpqtbblzr.cloudfront.net` |
+| API Gateway | `https://raw9qjg8o0.execute-api.ap-southeast-2.amazonaws.com` |
 | API Docs | Open `docs/index.html` locally via `npx serve docs/` |
 
 ## Architecture Overview
@@ -167,21 +167,21 @@ Production authentication is handled by AWS Cognito with RS256 JWTs. Local Docke
 
 All services validate RS256 JWTs issued by AWS Cognito.
 
-- **User Pool:** `ap-southeast-1_3XvO4K1lI`
-- **App Client:** `4iboa3a11vktthtupoidetvk9o` (no secret — browser-safe)
-- **JWKS URL:** `https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_3XvO4K1lI/.well-known/jwks.json`
+- **User Pool:** `ap-southeast-2_gxGEa7l58`
+- **App Client:** `1pm7h3lr03k62ncrvkmtf2s5vl` (no secret — browser-safe)
+- **JWKS URL:** `https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_gxGEa7l58/.well-known/jwks.json`
 - **Role claim:** `custom:role` in the ID token (`patient` | `staff` | `doctor` | `admin`)
 - **Pre-SignUp trigger:** `cognito-auto-confirm` Lambda — users are auto-confirmed (no email verification required)
 
 ### Cognito Sign-In Example
 
 ```bash
-curl -X POST https://cognito-idp.ap-southeast-1.amazonaws.com/ \
+curl -X POST https://cognito-idp.ap-southeast-2.amazonaws.com/ \
   -H "Content-Type: application/x-amz-json-1.1" \
   -H "X-Amz-Target: AWSCognitoIdentityProviderService.InitiateAuth" \
   -d '{
     "AuthFlow": "USER_PASSWORD_AUTH",
-    "ClientId": "4iboa3a11vktthtupoidetvk9o",
+    "ClientId": "1pm7h3lr03k62ncrvkmtf2s5vl",
     "AuthParameters": { "USERNAME": "<email>", "PASSWORD": "<password>" }
   }'
 # Use AuthenticationResult.IdToken as the Bearer token
@@ -200,7 +200,7 @@ curl -X POST https://cognito-idp.ap-southeast-1.amazonaws.com/ \
 
 ```bash
 aws cognito-idp admin-create-user \
-  --user-pool-id ap-southeast-1_3XvO4K1lI \
+  --user-pool-id ap-southeast-2_gxGEa7l58 \
   --username <username> \
   --user-attributes Name=email,Value=<email> Name=name,Value="<Full Name>" \
     Name="custom:role",Value=doctor Name=email_verified,Value=true \
@@ -208,7 +208,7 @@ aws cognito-idp admin-create-user \
   --temporary-password "Temp1234!"
 
 aws cognito-idp admin-set-user-password \
-  --user-pool-id ap-southeast-1_3XvO4K1lI \
+  --user-pool-id ap-southeast-2_gxGEa7l58 \
   --username <username> \
   --password "<permanent-password>" \
   --permanent
@@ -272,12 +272,12 @@ This flow still exists in the codebase, but the default demo path uses the autom
 
 Patient WebSocket (tracks own position):
 ```
-wss://d2qwgyxb2qmggu.cloudfront.net/api/queue/ws?appointment_id=<id>&token=<jwt>
+wss://d1ny1tpqtbblzr.cloudfront.net/api/queue/ws?appointment_id=<id>&token=<jwt>
 ```
 
 Staff WebSocket (full queue snapshot + live updates):
 ```
-wss://d2qwgyxb2qmggu.cloudfront.net/api/queue/ws/staff?token=<jwt>
+wss://d1ny1tpqtbblzr.cloudfront.net/api/queue/ws/staff?token=<jwt>
 ```
 
 Both use `token` as a query parameter because browsers cannot set custom headers on WebSocket connections.
@@ -365,7 +365,7 @@ IAM → Cognito → RDS → Amazon MQ → ElastiCache → ECR → ECS (Cluster +
 
 The JWKS URL for all services:
 ```
-https://cognito-idp.ap-southeast-1.amazonaws.com/<USER_POOL_ID>/.well-known/jwks.json
+https://cognito-idp.ap-southeast-2.amazonaws.com/<USER_POOL_ID>/.well-known/jwks.json
 ```
 
 ### 3. RDS PostgreSQL
@@ -411,9 +411,9 @@ Create one private repository per service (names match the service names in the 
 
 ```bash
 # Authenticate
-aws ecr get-login-password --region ap-southeast-1 \
+aws ecr get-login-password --region ap-southeast-2 \
   | docker login --username AWS --password-stdin \
-    617341601600.dkr.ecr.ap-southeast-1.amazonaws.com
+    929702668297.dkr.ecr.ap-southeast-2.amazonaws.com
 
 # Build and push all backend images (always --platform linux/amd64 — ECS is x86-64)
 sh infra/scripts/push-to-ecr.sh
@@ -427,7 +427,7 @@ The frontend is deployed separately to S3 + CloudFront in Step 10.
 
 **CloudWatch log group:**
 ```bash
-aws logs create-log-group --log-group-name /ecs/smart-clinic --region ap-southeast-1
+aws logs create-log-group --log-group-name /ecs/smart-clinic --region ap-southeast-2
 ```
 
 **ECS Cluster:**
@@ -502,7 +502,7 @@ All tasks share one security group. Add a self-referencing inbound rule (all tra
 
 2. **JWT Authorizer:**
    - Type: JWT
-   - Issuer: `https://cognito-idp.ap-southeast-1.amazonaws.com/<USER_POOL_ID>`
+   - Issuer: `https://cognito-idp.ap-southeast-2.amazonaws.com/<USER_POOL_ID>`
    - Audience: your App Client ID
 
 3. **Routes:** Create method-specific routes (not `ANY`) pointing at the ALB URL as an HTTP proxy integration. Attach the JWT authorizer to all routes except `/api/auth/*` and the Stripe webhook. See the API Gateway Routes table above.
@@ -514,16 +514,16 @@ All tasks share one security group. Add a self-referencing inbound rule (all tra
 
 ### 10. S3 (Frontend)
 
-1. Create bucket: `esd-smart-clinic-queue-prod-ap-southeast-1`
-   - Region: `ap-southeast-1`
+1. Create bucket: `esd-smart-clinic-queue-prod-ap-southeast-2`
+   - Region: `ap-southeast-2`
    - Block all public access: **On** (CloudFront uses OAC)
 
 2. Build and deploy:
 ```bash
 cd frontend/vue-app
 npm run build -- --mode production
-aws s3 sync dist s3://esd-smart-clinic-queue-prod-ap-southeast-1 --delete
-aws cloudfront create-invalidation --distribution-id E11KZ18SBDDTZ9 --paths "/*"
+aws s3 sync dist s3://esd-smart-clinic-queue-prod-ap-southeast-2 --delete
+aws cloudfront create-invalidation --distribution-id E30HDOAOLMHC2G --paths "/*"
 ```
 
 ### 11. CloudFront
@@ -558,16 +558,16 @@ aws cloudfront create-invalidation --distribution-id E11KZ18SBDDTZ9 --paths "/*"
 
 | Resource | Identifier |
 |----------|-----------|
-| AWS Region | `ap-southeast-1` |
-| AWS Account | `617341601600` |
-| Cognito User Pool | `ap-southeast-1_3XvO4K1lI` |
-| ECR Registry | `617341601600.dkr.ecr.ap-southeast-1.amazonaws.com` |
+| AWS Region | `ap-southeast-2` |
+| AWS Account | `929702668297` |
+| Cognito User Pool | `ap-southeast-2_gxGEa7l58` |
+| ECR Registry | `929702668297.dkr.ecr.ap-southeast-2.amazonaws.com` |
 | ECS Cluster | `smart-clinic-queue` |
 | Cloud Map Namespace | `smart-clinic.local` |
-| ALB | `smart-clinic-alb-2054248031.ap-southeast-1.elb.amazonaws.com` |
-| API Gateway | `https://y2noszdtvi.execute-api.ap-southeast-1.amazonaws.com` |
-| CloudFront | `https://d2qwgyxb2qmggu.cloudfront.net` (dist `E11KZ18SBDDTZ9`) |
-| S3 Bucket | `esd-smart-clinic-queue-prod-ap-southeast-1` |
+| ALB | `smart-clinic-alb-103991392.ap-southeast-2.elb.amazonaws.com` |
+| API Gateway | `https://raw9qjg8o0.execute-api.ap-southeast-2.amazonaws.com` |
+| CloudFront | `https://d1ny1tpqtbblzr.cloudfront.net` (dist `E30HDOAOLMHC2G`) |
+| S3 Bucket | `esd-smart-clinic-queue-prod-ap-southeast-2` |
 | CloudWatch Logs | `/ecs/smart-clinic` |
 
 ---
@@ -584,7 +584,7 @@ sh infra/scripts/push-to-ecr.sh
 sh infra/scripts/register-task-definitions.sh
 
 # 3. Force-redeploy a specific service
-aws ecs update-service --cluster smart-clinic-queue --region ap-southeast-1 \
+aws ecs update-service --cluster smart-clinic-queue --region ap-southeast-2 \
   --service <service-name> --task-definition <service-name> --force-new-deployment
 ```
 
@@ -615,9 +615,9 @@ This configures each composite service to scale between 1 and 4 tasks, targeting
 ### Scale to zero (save costs)
 
 ```bash
-for svc in $(aws ecs list-services --cluster smart-clinic-queue --region ap-southeast-1 \
+for svc in $(aws ecs list-services --cluster smart-clinic-queue --region ap-southeast-2 \
   --output text --query 'serviceArns[*]' | tr '\t' '\n' | xargs -I{} basename {}); do
-  aws ecs update-service --cluster smart-clinic-queue --region ap-southeast-1 \
+  aws ecs update-service --cluster smart-clinic-queue --region ap-southeast-2 \
     --service $svc --desired-count 0 --output text --query 'service.serviceName'
 done
 ```
@@ -625,9 +625,9 @@ done
 ### Scale back up
 
 ```bash
-for svc in $(aws ecs list-services --cluster smart-clinic-queue --region ap-southeast-1 \
+for svc in $(aws ecs list-services --cluster smart-clinic-queue --region ap-southeast-2 \
   --output text --query 'serviceArns[*]' | tr '\t' '\n' | xargs -I{} basename {}); do
-  aws ecs update-service --cluster smart-clinic-queue --region ap-southeast-1 \
+  aws ecs update-service --cluster smart-clinic-queue --region ap-southeast-2 \
     --service $svc --desired-count 1 --output text --query 'service.serviceName'
 done
 ```
@@ -705,7 +705,7 @@ The service POSTs every clinic event to this URL and GETs logs from it. If you d
 
 **`infra/env/patient.env`** — The `AWS_*` and `S3_BUCKET` variables are used for file uploads to S3. Without them, file uploads in medical records will fail, but all other patient features will continue to work:
 ```
-AWS_REGION=ap-southeast-1            # optional
+AWS_REGION=ap-southeast-2            # optional
 AWS_ACCESS_KEY_ID=...                # optional
 AWS_SECRET_ACCESS_KEY=...            # optional
 S3_BUCKET=...                        # optional
